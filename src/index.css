@@ -1,0 +1,112 @@
+/*
+ *(index.css)
+ * Hojas de estilo globales de la app de usuarios de ContaVen.
+ *
+ * TailwindCSS v4 se importa con @import "tailwindcss".
+ * Aquí se definen los colores y el modo claro (por defecto) y el
+ * modo oscuro de la app, que el usuario puede cambiar en Configuración.
+ */
+
+/* Se importan las utilidades de Tailwind */
+@import "tailwindcss";
+
+/*
+ * Modo oscuro: se activa poniendo la clase "oscuro" en el <html>.
+ * La app arranca en modo claro, que es el predeterminado.
+ */
+@custom-variant oscuro (&:where(.oscuro, .oscuro *));
+
+/* Colores y estilos base de toda la aplicación */
+@theme {
+  /* Color principal de ContaVen */
+  --color-marca-50: #eef6ff;
+  --color-marca-100: #d9eaff;
+  --color-marca-200: #bcdbff;
+  --color-marca-300: #8ec5ff;
+  --color-marca-400: #59a5ff;
+  --color-marca-500: #3182f6;
+  --color-marca-600: #1c62e9;
+  --color-marca-700: #174ec6;
+  --color-marca-800: #1943a1;
+  --color-marca-900: #1a3c81;
+
+  /* Color de éxito (ganancias) */
+  --color-exito-500: #16a34a;
+  --color-exito-600: #15803d;
+
+  /* Color de error (pérdidas, avisos) */
+  --color-error-500: #dc2626;
+  --color-error-600: #b91c1c;
+}
+
+/* Estilo del fondo y el texto según el modo claro u oscuro */
+@layer base {
+  :root {
+    /* Fondo de las páginas */
+    --fondo: #f4f6fa;
+    /* Tarjetas y cajas blancas */
+    --superficie: #ffffff;
+    /* Texto normal */
+    --texto: #1a202c;
+    /* Texto más suave */
+    --texto-suave: #64748b;
+    /* Bordes de las cajas */
+    --borde: #e2e8f0;
+  }
+
+  /* Cuando la clase "oscuro" está activa cambian todos los colores */
+  .oscuro {
+    --fondo: #0f172a;
+    --superficie: #1e293b;
+    --texto: #e2e8f0;
+    --texto-suave: #94a3b8;
+    --borde: #334155;
+  }
+
+  body {
+    background-color: var(--fondo);
+    color: var(--texto);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+}
+
+/*
+ * Clases propias de la app que se usan en varias pantallas.
+ * Se escriben con @utility para que Tailwind las reconozca.
+ */
+
+/* Tarjeta blanca con borde suave, usada en casi todas las secciones */
+@utility tarjeta {
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
+}
+
+/* Texto de color suave para textos secundarios */
+@utility texto-suave {
+  color: var(--texto-suave);
+}
+
+/* Campo de formulario con su borde */
+@utility campo {
+  width: 100%;
+  border: 1px solid var(--borde);
+  border-radius: 0.5rem;
+  background-color: var(--superficie);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--texto);
+  outline: none;
+}
+
+/* El campo de formulario cuando tiene el cursor encima */
+@utility campo-enfocado {
+  border-color: var(--color-marca-500);
+  box-shadow: 0 0 0 3px var(--color-marca-100);
+}
+
+/* Quita el borde de focus azul por defecto del navegador */
+@utility sin-contorno {
+  outline: none;
+}

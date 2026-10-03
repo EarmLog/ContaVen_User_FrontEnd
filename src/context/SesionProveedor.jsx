@@ -47,8 +47,19 @@ export function ProveedorSesion({ children }) {
       setPerfil(datosPerfil)
       setDolar(datosDolar)
     } catch (error) {
-      // Si el backend dice que está bloqueado se guarda para avisarle
-      setPerfil((anterior) => anterior || { error: error.message, bloqueado: true })
+      // Solo se marca como bloqueado si el backend lo dijo explícitamente
+      // (403 con bloqueado). Si el backend no respondió no es un bloqueo:
+      // se muestra el error y se deja al usuario dentro de la app.
+      if (error.bloqueado) {
+        setPerfil({ error: error.message, bloqueado: true })
+        return
+      }
+
+      setPerfil((anterior) => anterior || {
+        error: error.message,
+        bloqueado: false,
+        sinConexion: Boolean(error.sinConexion),
+      })
     }
   }, [])
 

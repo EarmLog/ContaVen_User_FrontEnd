@@ -5,12 +5,27 @@
  * Aquí se centralizan todas las llamadas al servidor para no repetir
  * la dirección ni el token en cada pantalla. Si el usuario está
  * bloqueado, la app lo manda directo a la pantalla de acceso bloqueado.
+ *
+ * Ojo con la diferencia entre los dos errores que puede devolver el backend:
+ *   - 403 con { bloqueado: true } -> la licencia venció, sí se cierra el acceso
+ *   - fallo de red                -> el servidor no respondió, no se cierra nada
+ * Antes los dos acababan en la pantalla de "bloqueado", que despistaba mucho.
  */
 
 import supabase from './supabase'
 
-// Dirección del backend Flask, tomada del archivo .env
-const URL_API = import.meta.env.VITE_URL_API || 'http://localhost:5001'
+// Dirección del backend Flask, tomada del archivo .env.
+// Sin este valor no hay forma de saber a qué backend calling, así que se
+// avisa al arrancar en vez de apuntar en silencio a localhost: en producción
+// eso hacía que la app creyera que el usuario estaba bloqueado.
+const URL_API = (import.meta.env.VITE_URL_API || '').replace(/\/$/, '')
+
+if (!URL_API) {
+  console.error(
+    'Falta VITE_URL_API: no se sabe a qué backend llamar. ' +
+      'Cópiala en el archivo .env y vuelve a construir la app.',
+  )
+}
 
 /**
  * Devuelve el token de sesión del usuario que está logueado en Supabase.
@@ -33,14 +48,27 @@ async function llamarApi(ruta, opciones = {}) {
   const token = await obtenerToken()
 
   // Se arma la petición con el token en la cabecera
-  const respuesta = await fetch(`${URL_API}/api${ruta}`, {
-    method: opciones.metodo || 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...(opciones.cuerpo ? { body: JSON.stringify(opciones.cuerpo) } : {}),
-  })
+  let respuesta
+
+  try {
+    respuesta = await fetch(`${URL_API}/api${ruta}`, {
+      method: opciones.metodo || 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      ...(opciones.cuerpo ? { body: JSON.stringify(opciones.cuerpo) } : {}),
+    })
+  } catch {
+    // Si fetch falla así es que el backend no respondió: no hay servidor,
+    // se cayó, o CORS lo bloqueó. NO es que el usuario esté bloqueado, y
+    // antes se confundía con eso y lo echaba de la app.
+    const error = new Error(
+      'No se pudo conectar con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.',
+    )
+    error.sinConexion = true
+    throw error
+  }
 
   // Se lee la respuesta
   const datos = await respuesta.json().catch(() => ({}))
@@ -49,7 +77,9 @@ async function llamarApi(ruta, opciones = {}) {
   if (!respuesta.ok) {
     // Si el error es 403 y dice bloqueado, se avisa para sacarlo de la app
     if (respuesta.status === 403 && datos.bloqueado) {
-      throw new Error(datos.error)
+      const errorBloqueo = new Error(datos.error)
+      errorBloqueo.bloqueado = true
+      throw errorBloqueo
     }
 
     const error = new Error(datos.error || 'Ocurrió un error. Intenta de nuevo.')

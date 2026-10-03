@@ -17,7 +17,7 @@ import { useSesion } from '../context/SesionProveedor'
  */
 export default function RutaProtegida({ children }) {
   // Se traen los datos de la sesión
-  const { cargando, estaLogueado, estaBloqueado } = useSesion()
+  const { cargando, estaLogueado, estaBloqueado, perfil } = useSesion()
 
   // Mientras se revisa si hay sesión se muestra el spinner
   if (cargando) {
@@ -38,7 +38,36 @@ export default function RutaProtegida({ children }) {
     return <Navigate to="/login" replace />
   }
 
-  return children
+  return (
+    <>
+      {/* El backend no respondió: la sesión de Supabase es válida, pero sin
+          servidor no hay datos que mostrar. Se avisa arriba en vez de dejar
+          pantallas vacías sin explicación. */}
+      {perfil?.sinConexion && <AvisoSinConexion mensaje={perfil.error} />}
+
+      {children}
+    </>
+  )
+}
+
+/**
+ * Banner de aviso para cuando el backend no está disponible.
+ * @param {object} props - { mensaje }
+ * @returns {JSX.Element}
+ */
+function AvisoSinConexion({ mensaje }) {
+  return (
+    <div className="bg-amber-100 px-4 py-3 text-center text-sm text-amber-900">
+      <strong>Sin conexión con el servidor.</strong>{' '}
+      {mensaje || 'No se pudieron cargar tus datos.'}{' '}
+      <button
+        onClick={() => window.location.reload()}
+        className="underline hover:no-underline"
+      >
+        Reintentar
+      </button>
+    </div>
+  )
 }
 
 /**

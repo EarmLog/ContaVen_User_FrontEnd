@@ -26,3 +26,4 @@ dist-ssr
 # Variables de entorno (contienen llaves de Supabase)
 .env
 .env.local
+.vercel

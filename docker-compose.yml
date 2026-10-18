@@ -1,0 +1,22 @@
+# ============================================================
+# ContaVen - Docker Compose de la app de usuarios
+# ============================================================
+# Levanta el frontend de usuarios (sitio estático servido con nginx).
+#
+#   docker compose up --build
+#
+# y luego se abre en http://localhost:8080
+#
+# El backend Flask corre aparte (ver el proyecto ContaVen_User_BackEnd).
+# ============================================================
+
+services:
+  frontend-usuarios:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: contaven-user-frontend
+    container_name: contaven-user-frontend
+    ports:
+      - "8080:80"
+    restart: unless-stopped

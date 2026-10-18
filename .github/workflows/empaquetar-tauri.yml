@@ -1,0 +1,36 @@
+name: Empaquetar la app de escritorio (Tauri)
+
+# Genera los instaladores de escritorio (.exe, .dmg, .AppImage) de ContaVen.
+# Solo corre si alguien lo lanza a mano (workflow_dispatch), para no gastar
+# minutos de CI en cada push.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  empaquetar:
+    name: Empaquetar con Tauri
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Bajar el código
+        uses: actions/checkout@v4
+
+      - name: Usar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar dependencias de la web
+        run: npm ci
+
+      - name: Empaquetar con Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tauriScript: npx tauri

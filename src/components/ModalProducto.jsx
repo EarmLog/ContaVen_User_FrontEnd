@@ -7,12 +7,17 @@
  * es un producto nuevo y el botón dice "Registrar producto".
  *
  * Los precios de VES y USD se calculan solos entre sí con la tasa del dólar.
+ * Lo mismo pasa con los precios al mayor.
+ *
+ * Extra: venta por bulto y precio al mayor. Si el producto se vende por
+ * bulto se indica cuántas unidades trae. Si se vende al mayor se indica
+ * desde cuántas unidades aplica y el precio especial.
  */
 
 import { useState } from 'react'
 
-import Modal from './Modal'
-import { redondear, usdAVes, vesAUsd } from '../utils/formato'
+import ModalContainer from './ui/ModalContainer'
+import { redondear, usdAVes, vesAUsd } from '../lib/formato'
 
 // Un producto sin datos, para empezar el formulario vacío
 const PRODUCTO_VACIO = {
@@ -25,6 +30,20 @@ const PRODUCTO_VACIO = {
   precio_usd: '',
   precio_compra_ves: '',
   precio_compra_usd: '',
+  unidades_por_bulto: '',
+  cantidad_mayor: '',
+  precio_mayor_ves: '',
+  precio_mayor_usd: '',
+}
+
+// Cada campo de precio y el campo de la otra moneda que se calcula con él
+const PARES_DE_PRECIO = {
+  precio_ves: 'precio_usd',
+  precio_usd: 'precio_ves',
+  precio_compra_ves: 'precio_compra_usd',
+  precio_compra_usd: 'precio_compra_ves',
+  precio_mayor_ves: 'precio_mayor_usd',
+  precio_mayor_usd: 'precio_mayor_ves',
 }
 
 /**
@@ -45,6 +64,17 @@ function datosIniciales(producto) {
     precio_usd: String(producto.precio_usd ?? ''),
     precio_compra_ves: String(producto.precio_compra_ves ?? ''),
     precio_compra_usd: String(producto.precio_compra_usd ?? ''),
+    // Los campos de bulto se muestran vacíos cuando valen 1 (el valor normal)
+    unidades_por_bulto:
+      producto.unidades_por_bulto && producto.unidades_por_bulto > 1
+        ? String(producto.unidades_por_bulto)
+        : '',
+    cantidad_mayor:
+      producto.cantidad_mayor && producto.cantidad_mayor > 1
+        ? String(producto.cantidad_mayor)
+        : '',
+    precio_mayor_ves: producto.precio_mayor_ves ? String(producto.precio_mayor_ves) : '',
+    precio_mayor_usd: producto.precio_mayor_usd ? String(producto.precio_mayor_usd) : '',
   }
 }
 
@@ -53,13 +83,9 @@ function datosIniciales(producto) {
  *
  * La pantalla de Inventario le pasa una "key" que cambia cada vez que se abre
  * la ventana con otro producto. Eso hace que React monte este componente de
- * nuevo y el formulario empiece siempre con los datos correctos, sin usar un
- * efecto para eso.
+ * nuevo y el formulario empiece siempre con los datos correctos.
  *
- * @param {object} props - {
- *   abierto, producto, tasa, guardando,
- *   alGuardar, alCerrar
- * }
+ * @param {object} props - { abierto, producto, tasa, guardando, alGuardar, alCerrar }
  * @returns {JSX.Element}
  */
 export default function ModalProducto({ abierto, producto, tasa, guardando, alGuardar, alCerrar }) {
@@ -82,17 +108,11 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
    */
   function manejarCambioPrecio(evento) {
     const { name, value } = evento.target
+    const pareja = PARES_DE_PRECIO[name]
 
     // Si el campo quedó vacío, se vacía también el del otro lado
     if (value === '') {
-      setFormulario((anterior) => {
-        const copia = { ...anterior, [name]: '' }
-        if (name === 'precio_ves') copia.precio_usd = ''
-        if (name === 'precio_usd') copia.precio_ves = ''
-        if (name === 'precio_compra_ves') copia.precio_compra_usd = ''
-        if (name === 'precio_compra_usd') copia.precio_compra_ves = ''
-        return copia
-      })
+      setFormulario((anterior) => ({ ...anterior, [name]: '', [pareja]: '' }))
       return
     }
 
@@ -104,41 +124,13 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
       return
     }
 
-    // Se escribe en VES y se calcula el USD
-    if (name === 'precio_ves') {
-      setFormulario((anterior) => ({
-        ...anterior,
-        precio_ves: redondear(monto),
-        precio_usd: vesAUsd(monto, tasa),
-      }))
-      return
-    }
+    // Si el campo es en bolívares, el otro se calcula en dólares; y al revés
+    const esEnBolivares = name.endsWith('_ves')
 
-    // Se escribe en USD y se calcula el VES
-    if (name === 'precio_usd') {
-      setFormulario((anterior) => ({
-        ...anterior,
-        precio_usd: redondear(monto),
-        precio_ves: usdAVes(monto, tasa),
-      }))
-      return
-    }
-
-    // Compra en VES -> se calcula el USD
-    if (name === 'precio_compra_ves') {
-      setFormulario((anterior) => ({
-        ...anterior,
-        precio_compra_ves: redondear(monto),
-        precio_compra_usd: vesAUsd(monto, tasa),
-      }))
-      return
-    }
-
-    // Compra en USD -> se calcula el VES
     setFormulario((anterior) => ({
       ...anterior,
-      precio_compra_usd: redondear(monto),
-      precio_compra_ves: usdAVes(monto, tasa),
+      [name]: redondear(monto),
+      [pareja]: esEnBolivares ? vesAUsd(monto, tasa) : usdAVes(monto, tasa),
     }))
   }
 
@@ -161,6 +153,14 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
 
     if (!formulario.precio_ves && !formulario.precio_usd) {
       nuevosErrores.precio = 'Coloca el precio de venta en VES o en USD.'
+    }
+
+    if (formulario.unidades_por_bulto && Number(formulario.unidades_por_bulto) < 1) {
+      nuevosErrores.unidades_por_bulto = 'Debe haber al menos 1 unidad por bulto.'
+    }
+
+    if (formulario.cantidad_mayor && Number(formulario.cantidad_mayor) < 1) {
+      nuevosErrores.cantidad_mayor = 'La cantidad mínima al mayor debe ser al menos 1.'
     }
 
     setErrores(nuevosErrores)
@@ -186,11 +186,19 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
       precio_usd: Number(formulario.precio_usd) || 0,
       precio_compra_ves: Number(formulario.precio_compra_ves) || 0,
       precio_compra_usd: Number(formulario.precio_compra_usd) || 0,
+      unidades_por_bulto: Number(formulario.unidades_por_bulto) || 1,
+      cantidad_mayor: Number(formulario.cantidad_mayor) || 1,
+      precio_mayor_ves: Number(formulario.precio_mayor_ves) || 0,
+      precio_mayor_usd: Number(formulario.precio_mayor_usd) || 0,
     })
   }
 
   return (
-    <Modal abierto={abierto} titulo={producto ? 'Editar producto' : 'Registrar producto'} alCerrar={alCerrar}>
+    <ModalContainer
+      abierto={abierto}
+      titulo={producto ? 'Editar producto' : 'Registrar producto'}
+      alCerrar={alCerrar}
+    >
       <form onSubmit={manejarEnvio} className="space-y-5">
 
         {/* --- Datos básicos --- */}
@@ -344,6 +352,84 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
           </div>
         </div>
 
+        {/* --- Bultos y venta al mayor (opcionales) --- */}
+        <div className="rounded-lg border border-[var(--borde)] p-4">
+          <p className="mb-1 text-sm font-semibold">
+            Bultos y venta al mayor{' '}
+            <span className="texto-suave font-normal">(opcional)</span>
+          </p>
+          <p className="mb-3 text-xs texto-suave">
+            Si el producto se vende por bulto, indica cuántas unidades trae. Si se vende al mayor,
+            indica desde cuántas unidades aplica el precio especial.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Unidades por bulto</label>
+              <input
+                name="unidades_por_bulto"
+                type="number"
+                min="1"
+                value={formulario.unidades_por_bulto}
+                onChange={manejarCambio}
+                placeholder="1"
+                className={`campo ${errores.unidades_por_bulto ? 'border-red-400' : ''}`}
+              />
+              {errores.unidades_por_bulto && (
+                <p className="mt-1 text-xs text-red-600">{errores.unidades_por_bulto}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium">Cantidad mínima al mayor</label>
+              <input
+                name="cantidad_mayor"
+                type="number"
+                min="1"
+                value={formulario.cantidad_mayor}
+                onChange={manejarCambio}
+                placeholder="1"
+                className={`campo ${errores.cantidad_mayor ? 'border-red-400' : ''}`}
+              />
+              {errores.cantidad_mayor && (
+                <p className="mt-1 text-xs text-red-600">{errores.cantidad_mayor}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium">Precio al mayor en VES</label>
+              <input
+                name="precio_mayor_ves"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formulario.precio_mayor_ves}
+                onChange={manejarCambioPrecio}
+                placeholder="0.00"
+                className="campo"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium">Precio al mayor en USD</label>
+              <input
+                name="precio_mayor_usd"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formulario.precio_mayor_usd}
+                onChange={manejarCambioPrecio}
+                placeholder="0.00"
+                className="campo"
+              />
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs texto-suave">
+            Si dejas los precios al mayor en blanco, el producto solo se venderá al detal.
+          </p>
+        </div>
+
         {/* --- Botones --- */}
         <div className="flex flex-wrap justify-end gap-3 border-t border-[var(--borde)] pt-4">
           <button
@@ -362,6 +448,6 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
           </button>
         </div>
       </form>
-    </Modal>
+    </ModalContainer>
   )
 }

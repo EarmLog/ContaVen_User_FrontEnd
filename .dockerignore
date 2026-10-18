@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+.git
+.gitignore
+.env
+.env.local
+.env*.local
+.vercel
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md
+src-tauri
+android
+.github
+npm-debug.log*

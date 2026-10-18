@@ -1,3 +1,5 @@
+'use client'
+
 /*
  * (RutaProtegida.jsx)
  * Envuelve las pantallas que necesitan que el usuario haya iniciado sesión.
@@ -6,9 +8,10 @@
  * Si el administrador lo bloqueó, le muestra la pantalla de acceso bloqueado.
  */
 
-import { Navigate } from 'react-router-dom'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 
-import { useSesion } from '../context/SesionProveedor'
+import { useSesion } from '../context/AuthContext'
 
 /**
  * Revisa si el usuario puede ver la pantalla que está pidiendo.
@@ -18,6 +21,15 @@ import { useSesion } from '../context/SesionProveedor'
 export default function RutaProtegida({ children }) {
   // Se traen los datos de la sesión
   const { cargando, estaLogueado, estaBloqueado, perfil } = useSesion()
+  const navegar = useRouter()
+
+  // Si no hay sesión se lo manda al login (siempre con un efecto, que es
+  // como se navega en el App Router de Next.js)
+  useEffect(() => {
+    if (!cargando && !estaLogueado && !estaBloqueado) {
+      navegar.replace('/login')
+    }
+  }, [cargando, estaLogueado, estaBloqueado, navegar])
 
   // Mientras se revisa si hay sesión se muestra el spinner
   if (cargando) {
@@ -33,9 +45,13 @@ export default function RutaProtegida({ children }) {
     return <PantallaBloqueado />
   }
 
-  // Si no hay sesión se lo manda al login
+  // Si no hay sesión, mientras el efecto redirige se muestra el spinner
   if (!estaLogueado) {
-    return <Navigate to="/login" replace />
+    return (
+      <div className="grid min-h-screen place-items-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-marca-200 border-t-marca-600" />
+      </div>
+    )
   }
 
   return (
@@ -60,10 +76,7 @@ function AvisoSinConexion({ mensaje }) {
     <div className="bg-amber-100 px-4 py-3 text-center text-sm text-amber-900">
       <strong>Sin conexión con el servidor.</strong>{' '}
       {mensaje || 'No se pudieron cargar tus datos.'}{' '}
-      <button
-        onClick={() => window.location.reload()}
-        className="underline hover:no-underline"
-      >
+      <button onClick={() => window.location.reload()} className="underline hover:no-underline">
         Reintentar
       </button>
     </div>
@@ -71,8 +84,8 @@ function AvisoSinConexion({ mensaje }) {
 }
 
 /**
- * Pantalla que se muestra cuando el administrador bloqueó el acceso
- * del usuario. Le explica que debe pagar la licencia para continuar.
+ * Pantalla que se muestra cuando el administrador bloqueó el acceso del
+ * usuario. Le explica que debe pagar la licencia para continuar.
  * @returns {JSX.Element}
  */
 function PantallaBloqueado() {
@@ -93,8 +106,8 @@ function PantallaBloqueado() {
         </p>
 
         <p className="mt-4 text-sm">
-          Ponte en contacto con el administrador de ContaVen para regularizar tu licencia
-          y volver a tener acceso.
+          Ponte en contacto con el administrador de ContaVen para regularizar tu licencia y volver
+          a tener acceso.
         </p>
 
         <button

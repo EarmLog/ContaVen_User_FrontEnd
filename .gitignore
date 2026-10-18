@@ -7,9 +7,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencias y salidas de build
 node_modules
+.next
+out
 dist
 dist-ssr
+build
 *.local
 
 # Editor directories and files
@@ -23,7 +27,21 @@ dist-ssr
 *.sln
 *.sw?
 
+# Next.js
+next-env.d.ts
+
 # Variables de entorno (contienen llaves de Supabase)
 .env
 .env.local
+.env*.local
+
+# Vercel
 .vercel
+
+# Nativo (Tauri / Capacitor)
+src-tauri/target
+src-tauri/gen
+android/app/build
+android/build
+android/.gradle
+android/local.properties

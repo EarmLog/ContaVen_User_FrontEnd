@@ -6,18 +6,24 @@
  * muestra sus datos y el botón dice "Guardar cambios"; si no lo recibe,
  * es un producto nuevo y el botón dice "Registrar producto".
  *
- * Los precios de VES y USD se calculan solos entre sí con la tasa del dólar.
- * Lo mismo pasa con los precios al mayor.
+ * Tiene dos modos, según cómo se venda el producto:
+ *   - "unidad": el producto se vende suelto. Se escriben los precios por
+ *     unidad y, si se quiere, un descuento por cantidad (un % que aplica
+ *     a partir de cierta cantidad de unidades).
+ *   - "bulto":  el producto se vende por bulto (una caja con varias
+ *     unidades). Se escribe cuántas unidades trae el bulto y el precio
+ *     del bulto; el precio por unidad se calcula solo (bulto ÷ unidades).
+ *     Además se puede poner un descuento por comprar el bulto completo y
+ *     un precio al mayor.
  *
- * Extra: venta por bulto y precio al mayor. Si el producto se vende por
- * bulto se indica cuántas unidades trae. Si se vende al mayor se indica
- * desde cuántas unidades aplica y el precio especial.
+ * Los precios de VES y USD se calculan solos entre sí con la tasa del dólar.
+ * En el modo bulto lo mismo pasa con el precio del bulto y el de compra.
  */
 
 import { useState } from 'react'
 
 import ModalContainer from './ui/ModalContainer'
-import { redondear, usdAVes, vesAUsd } from '../lib/formato'
+import { formatearUsd, formatearVes, redondear, usdAVes, vesAUsd } from '../lib/formato'
 
 // Un producto sin datos, para empezar el formulario vacío
 const PRODUCTO_VACIO = {
@@ -34,6 +40,15 @@ const PRODUCTO_VACIO = {
   cantidad_mayor: '',
   precio_mayor_ves: '',
   precio_mayor_usd: '',
+  descuento_unidad_porcentaje: '',
+  descuento_unidad_desde: '',
+  descuento_bulto_porcentaje: '',
+  // Campos que solo existen en la pantalla del modo bulto: aquí se escribe
+  // el precio del bulto y de ahí sale el precio por unidad.
+  precio_bulto_ves: '',
+  precio_bulto_usd: '',
+  precio_compra_bulto_ves: '',
+  precio_compra_bulto_usd: '',
 }
 
 // Cada campo de precio y el campo de la otra moneda que se calcula con él
@@ -44,6 +59,10 @@ const PARES_DE_PRECIO = {
   precio_compra_usd: 'precio_compra_ves',
   precio_mayor_ves: 'precio_mayor_usd',
   precio_mayor_usd: 'precio_mayor_ves',
+  precio_bulto_ves: 'precio_bulto_usd',
+  precio_bulto_usd: 'precio_bulto_ves',
+  precio_compra_bulto_ves: 'precio_compra_bulto_usd',
+  precio_compra_bulto_usd: 'precio_compra_bulto_ves',
 }
 
 /**
@@ -52,7 +71,9 @@ const PARES_DE_PRECIO = {
  * @returns {object} - Los valores iniciales de los campos
  */
 function datosIniciales(producto) {
-  if (!producto) return PRODUCTO_VACIO
+  if (!producto) return { ...PRODUCTO_VACIO }
+
+  const unidades = Number(producto.unidades_por_bulto) || 1
 
   return {
     nombre: producto.nombre || '',
@@ -65,37 +86,85 @@ function datosIniciales(producto) {
     precio_compra_ves: String(producto.precio_compra_ves ?? ''),
     precio_compra_usd: String(producto.precio_compra_usd ?? ''),
     // Los campos de bulto se muestran vacíos cuando valen 1 (el valor normal)
-    unidades_por_bulto:
-      producto.unidades_por_bulto && producto.unidades_por_bulto > 1
-        ? String(producto.unidades_por_bulto)
-        : '',
+    unidades_por_bulto: unidades > 1 ? String(unidades) : '',
     cantidad_mayor:
       producto.cantidad_mayor && producto.cantidad_mayor > 1
         ? String(producto.cantidad_mayor)
         : '',
     precio_mayor_ves: producto.precio_mayor_ves ? String(producto.precio_mayor_ves) : '',
     precio_mayor_usd: producto.precio_mayor_usd ? String(producto.precio_mayor_usd) : '',
+    descuento_unidad_porcentaje: producto.descuento_unidad_porcentaje
+      ? String(producto.descuento_unidad_porcentaje)
+      : '',
+    descuento_unidad_desde:
+      producto.descuento_unidad_desde && producto.descuento_unidad_desde > 1
+        ? String(producto.descuento_unidad_desde)
+        : '',
+    descuento_bulto_porcentaje: producto.descuento_bulto_porcentaje
+      ? String(producto.descuento_bulto_porcentaje)
+      : '',
+    // El precio del bulto se arma con el precio por unidad y la cantidad
+    precio_bulto_ves: producto.precio_ves
+      ? String(redondear(Number(producto.precio_ves) * unidades))
+      : '',
+    precio_bulto_usd: producto.precio_usd
+      ? String(redondear(Number(producto.precio_usd) * unidades))
+      : '',
+    precio_compra_bulto_ves: producto.precio_compra_ves
+      ? String(redondear(Number(producto.precio_compra_ves) * unidades))
+      : '',
+    precio_compra_bulto_usd: producto.precio_compra_usd
+      ? String(redondear(Number(producto.precio_compra_usd) * unidades))
+      : '',
   }
 }
 
 /**
- * Muestra la ventana con el formulario del producto.
- *
- * La pantalla de Inventario le pasa una "key" que cambia cada vez que se abre
- * la ventana con otro producto. Eso hace que React monte este componente de
- * nuevo y el formulario empiece siempre con los datos correctos.
- *
- * @param {object} props - { abierto, producto, tasa, guardando, alGuardar, alCerrar }
+ * Ventana para registrar o editar un producto.
+ * @param {object} props - { abierto, producto, tasa, modo, guardando, alGuardar, alCerrar }
  * @returns {JSX.Element}
  */
-export default function ModalProducto({ abierto, producto, tasa, guardando, alGuardar, alCerrar }) {
-  // --- Estado del formulario ---
+export default function ModalProducto({
+  abierto,
+  producto,
+  tasa,
+  modo = 'unidad',
+  guardando,
+  alGuardar,
+  alCerrar,
+}) {
+  // Se traen los datos del producto al formulario (una sola vez al abrir)
   const [formulario, setFormulario] = useState(() => datosIniciales(producto))
   const [errores, setErrores] = useState({})
 
+  // Si el producto ya trae descuentos, las casillas arrancan marcadas
+  const [descuentoUnidadActivo, setDescuentoUnidadActivo] = useState(
+    Number(producto?.descuento_unidad_porcentaje) > 0,
+  )
+  const [descuentoBultoActivo, setDescuentoBultoActivo] = useState(
+    Number(producto?.descuento_bulto_porcentaje) > 0,
+  )
+
+  const esBulto = modo === 'bulto'
+
+  // Valores derivados del modo bulto: el precio por unidad y la ganancia
+  // se calculan solos a partir del precio del bulto.
+  const unidades = Number(formulario.unidades_por_bulto) || 1
+  const precioBultoVes = Number(formulario.precio_bulto_ves) || 0
+  const precioBultoUsd = Number(formulario.precio_bulto_usd) || 0
+  const compraBultoVes = Number(formulario.precio_compra_bulto_ves) || 0
+  const compraBultoUsd = Number(formulario.precio_compra_bulto_usd) || 0
+
+  const precioUnidadVes = redondear(precioBultoVes / unidades)
+  const precioUnidadUsd = redondear(precioBultoUsd / unidades)
+  const compraUnidadVes = redondear(compraBultoVes / unidades)
+  const compraUnidadUsd = redondear(compraBultoUsd / unidades)
+  const gananciaBultoVes = redondear(precioBultoVes - compraBultoVes)
+  const gananciaUnidadVes = redondear(precioUnidadVes - compraUnidadVes)
+
   /**
-   * Escribe en un campo normal.
-   * @param {object} evento - El evento del input
+   * Cambia un campo cualquiera del formulario.
+   * @param {Event} evento
    */
   function manejarCambio(evento) {
     const { name, value } = evento.target
@@ -103,100 +172,173 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
   }
 
   /**
-   * Escribe en un campo de precio y calcula el de la otra moneda.
-   * @param {object} evento - El evento del input
+   * Cambia un campo de precio y calcula el de la otra moneda.
+   * Sirve para el precio normal, el de compra, el del bulto y el al mayor.
+   * @param {Event} evento
    */
   function manejarCambioPrecio(evento) {
     const { name, value } = evento.target
     const pareja = PARES_DE_PRECIO[name]
 
-    // Si el campo quedó vacío, se vacía también el del otro lado
+    if (!pareja) return
+
+    // Si se deja en blanco, también se limpia el de la otra moneda
     if (value === '') {
       setFormulario((anterior) => ({ ...anterior, [name]: '', [pareja]: '' }))
       return
     }
 
-    const monto = Number(value)
+    const numero = Number(value)
 
-    // Sin tasa del dólar se guarda el monto tal como está
+    // Sin tasa del dólar solo se guarda lo que escribió el usuario
     if (!tasa) {
       setFormulario((anterior) => ({ ...anterior, [name]: value }))
       return
     }
 
-    // Si el campo es en bolívares, el otro se calcula en dólares; y al revés
-    const esEnBolivares = name.endsWith('_ves')
-
+    const esVes = name.endsWith('_ves')
     setFormulario((anterior) => ({
       ...anterior,
-      [name]: redondear(monto),
-      [pareja]: esEnBolivares ? vesAUsd(monto, tasa) : usdAVes(monto, tasa),
+      [name]: value,
+      [pareja]: String(redondear(esVes ? vesAUsd(numero, tasa) : usdAVes(numero, tasa))),
     }))
   }
 
   /**
-   * Revisa que los campos obligatorios estén completos.
-   * @returns {boolean} - Si el formulario está válido
+   * Marca o desmarca el descuento por cantidad del modo unidad.
+   * @param {boolean} estaActivo
    */
-  function validar() {
-    const nuevosErrores = {}
-
-    if (!formulario.nombre.trim()) {
-      nuevosErrores.nombre = 'El nombre es obligatorio.'
+  function alternarDescuentoUnidad(estaActivo) {
+    setDescuentoUnidadActivo(estaActivo)
+    if (!estaActivo) {
+      setFormulario((anterior) => ({
+        ...anterior,
+        descuento_unidad_porcentaje: '',
+        descuento_unidad_desde: '',
+      }))
     }
-
-    if (formulario.stock === '') {
-      nuevosErrores.stock = 'El stock es obligatorio.'
-    } else if (Number(formulario.stock) < 0) {
-      nuevosErrores.stock = 'El stock no puede ser negativo.'
-    }
-
-    if (!formulario.precio_ves && !formulario.precio_usd) {
-      nuevosErrores.precio = 'Coloca el precio de venta en VES o en USD.'
-    }
-
-    if (formulario.unidades_por_bulto && Number(formulario.unidades_por_bulto) < 1) {
-      nuevosErrores.unidades_por_bulto = 'Debe haber al menos 1 unidad por bulto.'
-    }
-
-    if (formulario.cantidad_mayor && Number(formulario.cantidad_mayor) < 1) {
-      nuevosErrores.cantidad_mayor = 'La cantidad mínima al mayor debe ser al menos 1.'
-    }
-
-    setErrores(nuevosErrores)
-    return Object.keys(nuevosErrores).length === 0
   }
 
   /**
-   * Manda el producto al backend.
-   * @param {object} evento - El evento del formulario
+   * Marca o desmarca el descuento por comprar el bulto completo.
+   * @param {boolean} estaActivo
+   */
+  function alternarDescuentoBulto(estaActivo) {
+    setDescuentoBultoActivo(estaActivo)
+    if (!estaActivo) {
+      setFormulario((anterior) => ({ ...anterior, descuento_bulto_porcentaje: '' }))
+    }
+  }
+
+  /**
+   * Revisa que los datos estén completos antes de guardar.
+   * @returns {boolean}
+   */
+  function validar() {
+    const nuevos = {}
+
+    if (!formulario.nombre.trim()) {
+      nuevos.nombre = 'El nombre del producto es obligatorio.'
+    }
+
+    if (formulario.stock === '') {
+      nuevos.stock = 'El stock es obligatorio.'
+    } else if (Number(formulario.stock) < 0) {
+      nuevos.stock = 'El stock no puede ser negativo.'
+    }
+
+    if (esBulto) {
+      if (!formulario.unidades_por_bulto || unidades < 2) {
+        nuevos.unidades_por_bulto = 'Un bulto debe traer al menos 2 unidades.'
+      }
+      if (precioBultoVes <= 0 && precioBultoUsd <= 0) {
+        nuevos.precio = 'Debes colocar el precio del bulto en VES o en USD.'
+      }
+    } else if (Number(formulario.precio_ves) <= 0 && Number(formulario.precio_usd) <= 0) {
+      nuevos.precio = 'Debes colocar el precio de venta en VES o en USD.'
+    }
+
+    if (descuentoUnidadActivo) {
+      const porcentaje = Number(formulario.descuento_unidad_porcentaje)
+      if (!(porcentaje > 0) || porcentaje > 100) {
+        nuevos.descuento = 'El porcentaje de descuento debe estar entre 1 y 100.'
+      }
+      if ((Number(formulario.descuento_unidad_desde) || 0) < 2) {
+        nuevos.descuento = 'El descuento por cantidad aplica desde 2 unidades o más.'
+      }
+    }
+
+    if (descuentoBultoActivo) {
+      const porcentaje = Number(formulario.descuento_bulto_porcentaje)
+      if (!(porcentaje > 0) || porcentaje > 100) {
+        nuevos.descuentoBulto = 'El porcentaje de descuento debe estar entre 1 y 100.'
+      }
+    }
+
+    setErrores(nuevos)
+    return Object.keys(nuevos).length === 0
+  }
+
+  /**
+   * Arma los datos que se mandan a guardar y los envía.
+   * @param {Event} evento
    */
   function manejarEnvio(evento) {
     evento.preventDefault()
 
     if (!validar()) return
 
-    alGuardar({
+    // Datos que valen para los dos modos
+    const comunes = {
       nombre: formulario.nombre.trim(),
       stock: Number(formulario.stock),
       tipo: formulario.tipo.trim(),
       descripcion: formulario.descripcion.trim(),
       sku: formulario.sku.trim(),
+      cantidad_mayor: Number(formulario.cantidad_mayor) || 1,
+      precio_mayor_ves: Number(formulario.precio_mayor_ves) || 0,
+      precio_mayor_usd: Number(formulario.precio_mayor_usd) || 0,
+    }
+
+    if (esBulto) {
+      // El precio por unidad que se guarda es el del bulto entre las unidades
+      alGuardar({
+        ...comunes,
+        precio_ves: redondear(precioBultoVes / unidades),
+        precio_usd: redondear(precioBultoUsd / unidades),
+        precio_compra_ves: redondear(compraBultoVes / unidades),
+        precio_compra_usd: redondear(compraBultoUsd / unidades),
+        unidades_por_bulto: unidades,
+        descuento_bulto_porcentaje: descuentoBultoActivo
+          ? Number(formulario.descuento_bulto_porcentaje) || 0
+          : 0,
+        descuento_unidad_porcentaje: 0,
+        descuento_unidad_desde: 1,
+      })
+      return
+    }
+
+    alGuardar({
+      ...comunes,
       precio_ves: Number(formulario.precio_ves) || 0,
       precio_usd: Number(formulario.precio_usd) || 0,
       precio_compra_ves: Number(formulario.precio_compra_ves) || 0,
       precio_compra_usd: Number(formulario.precio_compra_usd) || 0,
-      unidades_por_bulto: Number(formulario.unidades_por_bulto) || 1,
-      cantidad_mayor: Number(formulario.cantidad_mayor) || 1,
-      precio_mayor_ves: Number(formulario.precio_mayor_ves) || 0,
-      precio_mayor_usd: Number(formulario.precio_mayor_usd) || 0,
+      unidades_por_bulto: 1,
+      descuento_unidad_porcentaje: descuentoUnidadActivo
+        ? Number(formulario.descuento_unidad_porcentaje) || 0
+        : 0,
+      descuento_unidad_desde: descuentoUnidadActivo
+        ? Number(formulario.descuento_unidad_desde) || 1
+        : 1,
+      descuento_bulto_porcentaje: 0,
     })
   }
 
   return (
     <ModalContainer
       abierto={abierto}
-      titulo={producto ? 'Editar producto' : 'Registrar producto'}
+      titulo={producto ? 'Editar producto' : esBulto ? 'Registrar por bulto' : 'Registrar por unidad'}
       alCerrar={alCerrar}
     >
       <form onSubmit={manejarEnvio} className="space-y-5">
@@ -223,7 +365,7 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
           {/* Stock (obligatorio) */}
           <div>
             <label className="mb-1 block text-sm font-medium">
-              Stock <span className="text-error-500">*</span>
+              Stock en unidades <span className="text-error-500">*</span>
             </label>
             <input
               name="stock"
@@ -231,7 +373,7 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
               min="0"
               value={formulario.stock}
               onChange={manejarCambio}
-              placeholder="50"
+              placeholder="1"
               className={`campo ${errores.stock ? 'border-red-400' : ''}`}
             />
             {errores.stock && <p className="mt-1 text-xs text-red-600">{errores.stock}</p>}
@@ -277,111 +419,319 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
           </div>
         </div>
 
-        {/* --- Precios de venta --- */}
-        <div className="rounded-lg border border-[var(--borde)] p-4">
-          <p className="mb-3 text-sm font-semibold">Precios de venta</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Precio en VES</label>
-              <input
-                name="precio_ves"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formulario.precio_ves}
-                onChange={manejarCambioPrecio}
-                placeholder="0.00"
-                className={`campo ${errores.precio ? 'border-red-400' : ''}`}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Precio en USD</label>
-              <input
-                name="precio_usd"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formulario.precio_usd}
-                onChange={manejarCambioPrecio}
-                placeholder="0.00"
-                className={`campo ${errores.precio ? 'border-red-400' : ''}`}
-              />
-            </div>
-          </div>
-          {errores.precio && <p className="mt-1 text-xs text-red-600">{errores.precio}</p>}
-          {tasa && (
-            <p className="mt-2 text-xs texto-suave">
-              Se usa la tasa de Bs. {tasa} por dólar. Escribe en una moneda y la otra se calcula sola.
+        {/* ============================================================ */}
+        {/* MODO BULTO: cómo está compuesto el bulto y su precio        */}
+        {/* ------------------------------------------------------------ */}
+        {esBulto && (
+          <div className="rounded-lg border border-[var(--borde)] p-4">
+            <p className="mb-1 text-sm font-semibold">Datos del bulto</p>
+            <p className="mb-3 text-xs texto-suave">
+              Escribe cuántas unidades trae el bulto y cuánto cuesta el bulto
+              completo. El precio por unidad se calcula solo.
             </p>
-          )}
-        </div>
 
-        {/* --- Precios de compra (opcionales) --- */}
-        <div className="rounded-lg border border-[var(--borde)] p-4">
-          <p className="mb-3 text-sm font-semibold">
-            Precios de compra{' '}
-            <span className="texto-suave font-normal">(opcional, se usa para calcular la ganancia)</span>
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Compra en VES</label>
-              <input
-                name="precio_compra_ves"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formulario.precio_compra_ves}
-                onChange={manejarCambioPrecio}
-                placeholder="0.00"
-                className="campo"
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2 sm:max-w-[16rem]">
+                <label className="mb-1 block text-sm font-medium">
+                  Unidades por bulto <span className="text-error-500">*</span>
+                </label>
+                <input
+                  name="unidades_por_bulto"
+                  type="number"
+                  min="2"
+                  value={formulario.unidades_por_bulto}
+                  onChange={manejarCambio}
+                  placeholder="12"
+                  className={`campo ${errores.unidades_por_bulto ? 'border-red-400' : ''}`}
+                />
+                {errores.unidades_por_bulto && (
+                  <p className="mt-1 text-xs text-red-600">{errores.unidades_por_bulto}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">Precio del bulto en VES</label>
+                <input
+                  name="precio_bulto_ves"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formulario.precio_bulto_ves}
+                  onChange={manejarCambioPrecio}
+                  placeholder="0.00"
+                  className={`campo ${errores.precio ? 'border-red-400' : ''}`}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Precio del bulto en USD</label>
+                <input
+                  name="precio_bulto_usd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formulario.precio_bulto_usd}
+                  onChange={manejarCambioPrecio}
+                  placeholder="0.00"
+                  className={`campo ${errores.precio ? 'border-red-400' : ''}`}
+                />
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Compra en USD</label>
-              <input
-                name="precio_compra_usd"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formulario.precio_compra_usd}
-                onChange={manejarCambioPrecio}
-                placeholder="0.00"
-                className="campo"
-              />
+            {errores.precio && <p className="mt-1 text-xs text-red-600">{errores.precio}</p>}
+
+            {/* Precio por unidad calculado */}
+            <div className="mt-3 rounded-md bg-[var(--fondo)] px-3 py-2 text-sm">
+              <span className="texto-suave">Precio por unidad: </span>
+              <span className="font-semibold text-marca-700">
+                Bs. {formatearVes(precioUnidadVes)}
+              </span>
+              <span className="texto-suave"> / {formatearUsd(precioUnidadUsd)}</span>
+            </div>
+
+            {tasa && (
+              <p className="mt-2 text-xs texto-suave">
+                Se usa la tasa de Bs. {tasa} por dólar. Escribe en una moneda y la otra se
+                calcula sola.
+              </p>
+            )}
+
+            {/* Precio de compra del bulto (para la ganancia) */}
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Compra del bulto en VES</label>
+                <input
+                  name="precio_compra_bulto_ves"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formulario.precio_compra_bulto_ves}
+                  onChange={manejarCambioPrecio}
+                  placeholder="0.00"
+                  className="campo"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Compra del bulto en USD</label>
+                <input
+                  name="precio_compra_bulto_usd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formulario.precio_compra_bulto_usd}
+                  onChange={manejarCambioPrecio}
+                  placeholder="0.00"
+                  className="campo"
+                />
+              </div>
+            </div>
+
+            {/* Ganancia calculada */}
+            <div className="mt-3 rounded-lg bg-[var(--fondo)] p-3 text-sm">
+              <p>
+                <span className="texto-suave">Costo por unidad: </span>
+                <span className="font-medium">Bs. {formatearVes(compraUnidadVes)}</span>
+                <span className="texto-suave"> / {formatearUsd(compraUnidadUsd)}</span>
+              </p>
+              <p className="mt-1">
+                <span className="texto-suave">Ganancia del bulto: </span>
+                <span className={gananciaBultoVes > 0 ? 'font-semibold text-exito-600' : 'font-medium'}>
+                  Bs. {formatearVes(gananciaBultoVes)}
+                </span>
+              </p>
+              <p className="mt-1">
+                <span className="texto-suave">Ganancia por unidad: </span>
+                <span className={gananciaUnidadVes > 0 ? 'font-semibold text-exito-600' : 'font-medium'}>
+                  Bs. {formatearVes(gananciaUnidadVes)}
+                </span>
+              </p>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* --- Bultos y venta al mayor (opcionales) --- */}
+        {/* --- Precios de venta (solo modo unidad) --- */}
+        {!esBulto && (
+          <div className="rounded-lg border border-[var(--borde)] p-4">
+            <p className="mb-3 text-sm font-semibold">Precios de venta</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Precio en VES</label>
+                <input
+                  name="precio_ves"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formulario.precio_ves}
+                  onChange={manejarCambioPrecio}
+                  placeholder="0.00"
+                  className={`campo ${errores.precio ? 'border-red-400' : ''}`}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Precio en USD</label>
+                <input
+                  name="precio_usd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formulario.precio_usd}
+                  onChange={manejarCambioPrecio}
+                  placeholder="0.00"
+                  className={`campo ${errores.precio ? 'border-red-400' : ''}`}
+                />
+              </div>
+            </div>
+            {errores.precio && <p className="mt-1 text-xs text-red-600">{errores.precio}</p>}
+            {tasa && (
+              <p className="mt-2 text-xs texto-suave">
+                Se usa la tasa de Bs. {tasa} por dólar. Escribe en una moneda y la otra se
+                calcula sola.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* --- Precio de compra (solo modo unidad) --- */}
+        {!esBulto && (
+          <div className="rounded-lg border border-[var(--borde)] p-4">
+            <p className="mb-3 text-sm font-semibold">
+              Precio de compra{' '}
+              <span className="texto-suave font-normal">(opcional, para saber la ganancia)</span>
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Compra en VES</label>
+                <input
+                  name="precio_compra_ves"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formulario.precio_compra_ves}
+                  onChange={manejarCambioPrecio}
+                  placeholder="0.00"
+                  className="campo"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Compra en USD</label>
+                <input
+                  name="precio_compra_usd"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formulario.precio_compra_usd}
+                  onChange={manejarCambioPrecio}
+                  placeholder="0.00"
+                  className="campo"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- Descuento por cantidad (modo unidad) --- */}
+        {!esBulto && (
+          <div className="rounded-lg border border-[var(--borde)] p-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={descuentoUnidadActivo}
+                onChange={(e) => alternarDescuentoUnidad(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--borde)]"
+              />
+              Ofrecer descuento por cantidad
+            </label>
+
+            {descuentoUnidadActivo && (
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Descuento (%)</label>
+                  <input
+                    name="descuento_unidad_porcentaje"
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    max="100"
+                    value={formulario.descuento_unidad_porcentaje}
+                    onChange={manejarCambio}
+                    placeholder="10"
+                    className={`campo ${errores.descuento ? 'border-red-400' : ''}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Desde cuántas unidades</label>
+                  <input
+                    name="descuento_unidad_desde"
+                    type="number"
+                    min="2"
+                    value={formulario.descuento_unidad_desde}
+                    onChange={manejarCambio}
+                    placeholder="5"
+                    className={`campo ${errores.descuento ? 'border-red-400' : ''}`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {errores.descuento && <p className="mt-1 text-xs text-red-600">{errores.descuento}</p>}
+
+            <p className="mt-2 text-xs texto-suave">
+              El punto de venta aplica este descuento solo cuando el cliente se lleva esa
+              cantidad de unidades o más.
+            </p>
+          </div>
+        )}
+
+        {/* --- Descuento por bulto completo (modo bulto) --- */}
+        {esBulto && (
+          <div className="rounded-lg border border-[var(--borde)] p-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={descuentoBultoActivo}
+                onChange={(e) => alternarDescuentoBulto(e.target.checked)}
+                className="h-4 w-4 rounded border-[var(--borde)]"
+              />
+              Ofrecer descuento al comprar el bulto completo
+            </label>
+
+            {descuentoBultoActivo && (
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium">Descuento (%)</label>
+                <input
+                  name="descuento_bulto_porcentaje"
+                  type="number"
+                  step="0.01"
+                  min="1"
+                  max="100"
+                  value={formulario.descuento_bulto_porcentaje}
+                  onChange={manejarCambio}
+                  placeholder="10"
+                  className={`campo ${errores.descuentoBulto ? 'border-red-400' : ''}`}
+                />
+                {errores.descuentoBulto && (
+                  <p className="mt-1 text-xs text-red-600">{errores.descuentoBulto}</p>
+                )}
+              </div>
+            )}
+
+            <p className="mt-3 text-xs texto-suave">
+              El POS aplica este % solo si el cliente se lleva todas las unidades del bulto
+              ({unidades} unidades).
+            </p>
+          </div>
+        )}
+
+        {/* --- Precio al mayor (en los dos modos) --- */}
         <div className="rounded-lg border border-[var(--borde)] p-4">
           <p className="mb-1 text-sm font-semibold">
-            Bultos y venta al mayor{' '}
-            <span className="texto-suave font-normal">(opcional)</span>
+            Precio al mayor <span className="texto-suave font-normal">(opcional)</span>
           </p>
           <p className="mb-3 text-xs texto-suave">
-            Si el producto se vende por bulto, indica cuántas unidades trae. Si se vende al mayor,
-            indica desde cuántas unidades aplica el precio especial.
+            Si se vende al mayor, indica desde cuántas unidades aplica el precio especial.
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium">Unidades por bulto</label>
-              <input
-                name="unidades_por_bulto"
-                type="number"
-                min="1"
-                value={formulario.unidades_por_bulto}
-                onChange={manejarCambio}
-                placeholder="1"
-                className={`campo ${errores.unidades_por_bulto ? 'border-red-400' : ''}`}
-              />
-              {errores.unidades_por_bulto && (
-                <p className="mt-1 text-xs text-red-600">{errores.unidades_por_bulto}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium">Cantidad mínima al mayor</label>
+              <label className="mb-1 block text-sm font-medium">Desde cuántas unidades</label>
               <input
                 name="cantidad_mayor"
                 type="number"
@@ -389,11 +739,8 @@ export default function ModalProducto({ abierto, producto, tasa, guardando, alGu
                 value={formulario.cantidad_mayor}
                 onChange={manejarCambio}
                 placeholder="1"
-                className={`campo ${errores.cantidad_mayor ? 'border-red-400' : ''}`}
+                className="campo"
               />
-              {errores.cantidad_mayor && (
-                <p className="mt-1 text-xs text-red-600">{errores.cantidad_mayor}</p>
-              )}
             </div>
 
             <div>

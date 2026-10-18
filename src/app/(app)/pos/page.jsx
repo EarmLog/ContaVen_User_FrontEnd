@@ -28,7 +28,7 @@ const METODOS_PAGO = [
   { valor: 'efectivo', texto: 'Efectivo' },
   { valor: 'punto', texto: 'Punto de venta' },
   { valor: 'pagomovil', texto: 'Pagomóvil' },
-  { valor: 'app', texto: 'App' },
+  { valor: 'biopago', texto: 'Biopago' },
 ]
 
 /**
@@ -318,6 +318,12 @@ export default function Pos() {
                         </p>
                       )}
 
+                      {/* Aviso de descuento por cantidad */}
+                      {(Number(producto.descuento_unidad_porcentaje) > 0 ||
+                        Number(producto.descuento_bulto_porcentaje) > 0) && (
+                        <p className="mt-1 text-xs text-exito-600">Con descuento por cantidad</p>
+                      )}
+
                       {/* Stock disponible */}
                       <p
                         className={`mt-1 text-xs ${
@@ -452,6 +458,11 @@ function LineaCarrito({ linea, alCambiarCantidad, alCambiarMayor, alQuitar }) {
             {calculo.esMayor && (
               <span className="ml-1 rounded bg-marca-50 px-1.5 py-0.5 text-[10px] font-medium text-marca-700">
                 al mayor
+              </span>
+            )}
+            {calculo.descuentoPorcentaje > 0 && (
+              <span className="ml-1 rounded bg-exito-500/10 px-1.5 py-0.5 text-[10px] font-medium text-exito-600">
+                -{calculo.descuentoPorcentaje}%
               </span>
             )}
           </p>

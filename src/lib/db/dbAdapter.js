@@ -146,6 +146,9 @@ function datosDeProducto(datos) {
     cantidad_mayor: Number(datos.cantidad_mayor) || 1,
     precio_mayor_ves: Number(datos.precio_mayor_ves) || 0,
     precio_mayor_usd: Number(datos.precio_mayor_usd) || 0,
+    descuento_unidad_porcentaje: Number(datos.descuento_unidad_porcentaje) || 0,
+    descuento_unidad_desde: Number(datos.descuento_unidad_desde) || 1,
+    descuento_bulto_porcentaje: Number(datos.descuento_bulto_porcentaje) || 0,
   }
 }
 
@@ -334,11 +337,35 @@ export function calcularLinea(producto, unidades, esMayor) {
 
   const usaMayor = Boolean(esMayor) && ofreceMayor && unidades >= cantidadMayor
 
-  const precioVes = usaMayor ? Number(producto.precio_mayor_ves) : Number(producto.precio_ves)
-  const precioUsd = usaMayor ? Number(producto.precio_mayor_usd) : Number(producto.precio_usd)
+  let precioVes = usaMayor ? Number(producto.precio_mayor_ves) : Number(producto.precio_ves)
+  let precioUsd = usaMayor ? Number(producto.precio_mayor_usd) : Number(producto.precio_usd)
+
+  // Descuento por cantidad:
+  //  - por unidad: aplica desde "descuento_unidad_desde" unidades
+  //  - por bulto:  aplica al llevar el bulto completo
+  // Si los dos aplican, se usa el mayor (no se suman).
+  const unidadesBulto = Number(producto.unidades_por_bulto) || 1
+  const descuentoUnidad = Number(producto.descuento_unidad_porcentaje) || 0
+  const descuentoUnidadDesde = Number(producto.descuento_unidad_desde) || 1
+  const descuentoBulto = Number(producto.descuento_bulto_porcentaje) || 0
+
+  let descuentoPorcentaje = 0
+  if (descuentoUnidad > 0 && unidades >= descuentoUnidadDesde) {
+    descuentoPorcentaje = Math.max(descuentoPorcentaje, descuentoUnidad)
+  }
+  if (descuentoBulto > 0 && unidadesBulto > 1 && unidades >= unidadesBulto) {
+    descuentoPorcentaje = Math.max(descuentoPorcentaje, descuentoBulto)
+  }
+
+  if (descuentoPorcentaje > 0) {
+    const factor = 1 - descuentoPorcentaje / 100
+    precioVes = Math.round(precioVes * factor * 100) / 100
+    precioUsd = Math.round(precioUsd * factor * 100) / 100
+  }
 
   return {
     esMayor: usaMayor,
+    descuentoPorcentaje,
     precioUnitarioVes: precioVes,
     precioUnitarioUsd: precioUsd,
     subtotalVes: Math.round(precioVes * unidades * 100) / 100,
@@ -463,6 +490,7 @@ async function aplicarVentaLocal(m, lineas, metodoPago, ventaServidor, sincroniz
       ganancia_usd: gananciaLineaUsd,
       es_mayor: calculo.esMayor,
       unidades_por_bulto: linea.producto.unidades_por_bulto || 1,
+      descuento_porcentaje: calculo.descuentoPorcentaje,
     })
 
     // Se descuenta el stock en la base local

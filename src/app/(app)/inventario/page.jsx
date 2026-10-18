@@ -48,6 +48,7 @@ export default function Inventario() {
   // --- Estado de la ventana emergente ---
   const [ventanaAbierta, setVentanaAbierta] = useState(false)
   const [productoEditando, setProductoEditando] = useState(null) // null = producto nuevo
+  const [modoVentana, setModoVentana] = useState('unidad') // 'unidad' o 'bulto'
 
   // La tasa del dólar, con un valor por si aún no ha cargado
   const tasa = dolar?.precio_ves || 0
@@ -98,19 +99,23 @@ export default function Inventario() {
 
   /**
    * Abre la ventana para registrar un producto nuevo.
+   * @param {'unidad'|'bulto'} modo - Cómo se vende el producto
    */
-  function abrirNuevo() {
+  function abrirNuevo(modo = 'unidad') {
     setProductoEditando(null)
+    setModoVentana(modo)
     setError('')
     setVentanaAbierta(true)
   }
 
   /**
    * Abre la ventana con los datos de un producto para editarlo.
+   * Si el producto se vende por bulto, se abre el formulario de bulto.
    * @param {object} producto - El producto a editar
    */
   function abrirEditar(producto) {
     setProductoEditando(producto)
+    setModoVentana(Number(producto.unidades_por_bulto) > 1 ? 'bulto' : 'unidad')
     setError('')
     setVentanaAbierta(true)
   }
@@ -202,13 +207,21 @@ export default function Inventario() {
           </p>
         </div>
 
-        {/* Botón para registrar un producto nuevo */}
-        <button
-          onClick={abrirNuevo}
-          className="rounded-lg bg-marca-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700"
-        >
-          + Registrar producto
-        </button>
+        {/* Botones para registrar un producto nuevo */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => abrirNuevo('unidad')}
+            className="rounded-lg bg-marca-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700"
+          >
+            + Registrar por unidad
+          </button>
+          <button
+            onClick={() => abrirNuevo('bulto')}
+            className="rounded-lg border border-marca-600 px-5 py-2.5 text-sm font-medium text-marca-700 transition hover:bg-marca-50"
+          >
+            + Registrar por bulto
+          </button>
+        </div>
       </div>
 
       <Aviso tipo="error" mensaje={error} alCerrar={() => setError('')} />
@@ -239,7 +252,7 @@ export default function Inventario() {
             {/* Si no hay productos, se invita a registrar el primero */}
             {productos.length === 0 && (
               <button
-                onClick={abrirNuevo}
+                onClick={() => abrirNuevo('unidad')}
                 className="mt-4 rounded-lg bg-marca-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-marca-700"
               >
                 Registrar el primero
@@ -283,6 +296,15 @@ export default function Inventario() {
                                 title="Sin subir al servidor"
                               >
                                 local
+                              </span>
+                            )}
+                            {/* Marca de producto que se vende por bulto */}
+                            {Number(producto.unidades_por_bulto) > 1 && (
+                              <span
+                                className="rounded-full bg-marca-50 px-2 py-0.5 text-[10px] font-medium text-marca-700"
+                                title={`Bulto de ${producto.unidades_por_bulto} unidades`}
+                              >
+                                bulto x{producto.unidades_por_bulto}
                               </span>
                             )}
                           </span>
@@ -416,11 +438,12 @@ export default function Inventario() {
 
       {/* --- Ventana para registrar o editar --- */}
       <ModalProducto
-        // La key cambia con cada producto para que el formulario se reinicie
-        key={productoEditando?.id || 'nuevo'}
+        // La key cambia con cada producto o modo para que el formulario se reinicie
+        key={`${productoEditando?.id || 'nuevo'}-${modoVentana}`}
         abierto={ventanaAbierta}
         producto={productoEditando}
         tasa={tasa}
+        modo={modoVentana}
         guardando={guardando}
         alGuardar={guardarProducto}
         alCerrar={cerrarVentana}

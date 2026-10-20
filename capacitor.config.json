@@ -1,0 +1,15 @@
+{
+  "appId": "com.contaven.app",
+  "appName": "ContaVen",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorSQLite": {
+      "androidIsEncryption": false,
+      "androidDatabaseLocation": "default"
+    }
+  }
+}

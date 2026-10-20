@@ -5,10 +5,6 @@ description = "ContaVen - App de usuarios (inventario, POS y análisis) empaquet
 authors = ["ContaVen"]
 edition = "2021"
 
-[lib]
-name = "contaven_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

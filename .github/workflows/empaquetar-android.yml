@@ -41,6 +41,10 @@ jobs:
 
       - name: Compilar la web (export estático)
         run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_URL_API: ${{ secrets.NEXT_PUBLIC_URL_API }}
 
       - name: Generar el proyecto Android (si no existe)
         run: |

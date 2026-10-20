@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 import Aviso from '../../components/ui/Aviso'
+import Captcha from '../../components/Captcha'
 import * as api from '../../lib/api'
 import { validarRegistro } from '../../lib/validaciones'
 
@@ -37,6 +38,10 @@ export default function Registro() {
   const [exito, setExito] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [verContrasena, setVerContrasena] = useState(false)
+
+  // --- Estado del captcha ---
+  const [captchaOk, setCaptchaOk] = useState(false)
+  const [reiniciarCaptcha, setReiniciarCaptcha] = useState(0)
 
   // Para mandar al usuario al login cuando termine el registro
   const navegar = useRouter()
@@ -72,6 +77,12 @@ export default function Registro() {
     // Si hay algún error se detiene aquí
     if (Object.values(nuevosErrores).some(Boolean)) return
 
+    // Sin el captcha resuelto no se crea la cuenta
+    if (!captchaOk) {
+      setErrorGeneral('Escribe el código de seguridad para continuar.')
+      return
+    }
+
     setEnviando(true)
 
     try {
@@ -88,6 +99,9 @@ export default function Registro() {
       setTimeout(() => navegar.replace('/login'), 1800)
     } catch (error) {
       setErrorGeneral(error.message)
+      // Si algo falla, se pide un captcha nuevo por seguridad
+      setCaptchaOk(false)
+      setReiniciarCaptcha((n) => n + 1)
     } finally {
       setEnviando(false)
     }
@@ -219,10 +233,13 @@ export default function Registro() {
             {errores.telefono && <p className="mt-1 text-xs text-red-600">{errores.telefono}</p>}
           </div>
 
+          {/* Reto de seguridad para frenar cuentas automáticas */}
+          <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
+
           {/* Botón de registrarse */}
           <button
             type="submit"
-            disabled={enviando}
+            disabled={enviando || !captchaOk}
             className="w-full rounded-lg bg-marca-600 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? 'Creando cuenta...' : 'Registrarme'}

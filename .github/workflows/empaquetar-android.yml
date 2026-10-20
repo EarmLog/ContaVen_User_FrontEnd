@@ -1,0 +1,72 @@
+name: Empaquetar la app de Android (APK)
+
+# Genera el APK de ContaVen para Android y lo publica como "release" en
+# GitHub, para que el usuario lo pueda descargar e instalar en su teléfono.
+#
+# Se puede lanzar a mano (workflow_dispatch) o al subir una etiqueta "v*".
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  empaquetar:
+    name: Empaquetar APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Bajar el código
+        uses: actions/checkout@v4
+
+      - name: Usar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Usar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Preparar el Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar la web (export estático)
+        run: npm run build
+
+      - name: Generar el proyecto Android (si no existe)
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+
+      - name: Sincronizar la web con Android
+        run: npx cap sync android
+
+      - name: Compilar el APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Renombrar el APK
+        run: |
+          mkdir -p salida
+          cp android/app/build/outputs/apk/debug/app-debug.apk salida/ContaVen.apk
+
+      - name: Publicar el APK en el release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}-android', github.run_number) }}
+          name: 'ContaVen Android ${{ github.ref_type == ''tag'' && github.ref_name || github.run_number }}'
+          body: 'Descarga el APK, ábrelo en tu teléfono y acepta la instalación de apps de origen desconocido.'
+          files: salida/ContaVen.apk
+          fail_on_unmatched_files: true

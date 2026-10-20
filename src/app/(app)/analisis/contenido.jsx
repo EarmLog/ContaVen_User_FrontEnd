@@ -37,6 +37,7 @@ import {
 import * as api from '../../../lib/api'
 import Aviso from '../../../components/ui/Aviso'
 import Cargando from '../../../components/ui/Cargando'
+import ModalDescuento from '../../../components/ModalDescuento'
 import { fechaDeHoy, fechaHaceDias, formatearUsd, formatearVes, redondear } from '../../../lib/formato'
 
 // Colores para las gráficas
@@ -52,6 +53,14 @@ export default function AnalisisContenido() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [sinInternet, setSinInternet] = useState(false)
+
+  // --- Estado de la lista de productos sin vender ---
+  const [productosSinVender, setProductosSinVender] = useState([])
+  const [cargandoSinVender, setCargandoSinVender] = useState(false)
+
+  // --- Estado del modal de descuento ---
+  const [productoDescuento, setProductoDescuento] = useState(null)
+  const [guardandoDescuento, setGuardandoDescuento] = useState(false)
 
   // --- Estado de los filtros ---
   const [filtros, setFiltros] = useState({
@@ -109,6 +118,52 @@ export default function AnalisisContenido() {
    */
   function aplicarFiltros() {
     cargarReporte(filtros)
+  }
+
+  /**
+   * Pide al backend la lista de productos que no se vendieron en el periodo.
+   */
+  async function cargarSinVender() {
+    setCargandoSinVender(true)
+
+    try {
+      const respuesta = await api.obtenerProductosSinVender({
+        desde: filtros.desde,
+        hasta: filtros.hasta,
+      })
+      setProductosSinVender(respuesta.productos || [])
+    } catch (errorCarga) {
+      setError(errorCarga.message)
+    } finally {
+      setCargandoSinVender(false)
+    }
+  }
+
+  /**
+   * Abre el modal para ponerle descuento a un producto sin ventas.
+   * @param {object} producto - El producto seleccionado
+   */
+  function abrirDescuento(producto) {
+    setProductoDescuento(producto)
+  }
+
+  /**
+   * Guarda el descuento de un producto y refresca la lista.
+   * @param {number} id - El id del producto
+   * @param {object} descuento - { porcentaje, desde }
+   */
+  async function guardarDescuento(id, descuento) {
+    setGuardandoDescuento(true)
+
+    try {
+      await api.editarProducto(id, descuento)
+      setProductoDescuento(null)
+      await cargarSinVender()
+    } catch (errorGuardar) {
+      setError(errorGuardar.message)
+    } finally {
+      setGuardandoDescuento(false)
+    }
   }
 
   /**
@@ -304,6 +359,84 @@ export default function AnalisisContenido() {
         )}
       </section>
 
+      {/* --- Productos sin vender (con opción de descuento) --- */}
+      <section className="tarjeta overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--borde)] px-5 py-4">
+          <div>
+            <h2 className="font-semibold">Productos sin vender</h2>
+            <p className="mt-0.5 text-xs texto-suave">
+              Estos productos no tuvieron ventas en el periodo. Puedes ofrecerles un descuento.
+            </p>
+          </div>
+          <button
+            onClick={cargarSinVender}
+            disabled={cargandoSinVender}
+            className="rounded-lg border border-[var(--borde)] px-4 py-2 text-sm font-medium transition hover:bg-[var(--fondo)] disabled:opacity-60"
+          >
+            {cargandoSinVender ? 'Cargando...' : 'Buscar sin ventas'}
+          </button>
+        </div>
+
+        {productosSinVender.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm texto-suave">
+            Toca «Buscar sin ventas» para ver los productos que no se vendieron.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--fondo)] text-left text-xs texto-suave uppercase">
+                <tr>
+                  <th className="px-5 py-2 font-medium">Producto</th>
+                  <th className="px-5 py-2 text-right font-medium">Stock</th>
+                  <th className="px-5 py-2 text-right font-medium">Precio VES</th>
+                  <th className="px-5 py-2 text-right font-medium">Descuento actual</th>
+                  <th className="px-5 py-2 text-right font-medium">Acción</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-[var(--borde)]">
+                {productosSinVender.map((producto) => {
+                  const enDescuento = Number(producto.descuento_unidad_porcentaje) > 0
+
+                  return (
+                    <tr key={producto.id}>
+                      <td className="px-5 py-2.5 font-medium">
+                        {producto.nombre}
+                        {producto.sku && (
+                          <span className="ml-2 text-xs texto-suave">{producto.sku}</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-2.5 text-right">{producto.stock}</td>
+                      <td className="px-5 py-2.5 text-right">
+                        Bs. {formatearVes(producto.precio_ves)}
+                      </td>
+                      <td className="px-5 py-2.5 text-right">
+                        {enDescuento ? (
+                          <span className="rounded-full bg-exito-500/10 px-2 py-0.5 text-xs font-medium text-exito-600">
+                            {producto.descuento_unidad_porcentaje}% desde{' '}
+                            {producto.descuento_unidad_desde} und.
+                          </span>
+                        ) : (
+                          <span className="text-xs texto-suave">Sin descuento</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-2.5 text-right">
+                        <button
+                          onClick={() => abrirDescuento(producto)}
+                          className="rounded-lg bg-marca-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-marca-700"
+                        >
+                          {enDescuento ? 'Cambiar descuento' : 'Agregar descuento'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       {/* --- Gráfica de ventas por día --- */}
       <Grafica
         titulo="Ventas por día"
@@ -455,6 +588,15 @@ export default function AnalisisContenido() {
           </div>
         </div>
       </Grafica>
+
+      {/* --- Modal para aplicar descuento --- */}
+      <ModalDescuento
+        abierto={productoDescuento !== null}
+        producto={productoDescuento}
+        guardando={guardandoDescuento}
+        alGuardar={guardarDescuento}
+        alCerrar={() => setProductoDescuento(null)}
+      />
     </div>
   )
 }

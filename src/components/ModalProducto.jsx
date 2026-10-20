@@ -294,7 +294,7 @@ export default function ModalProducto({
       stock: Number(formulario.stock),
       tipo: formulario.tipo.trim(),
       descripcion: formulario.descripcion.trim(),
-      sku: formulario.sku.trim(),
+          sku: formulario.sku.trim() || null, // Se genera automáticamente si está vacío
       cantidad_mayor: Number(formulario.cantidad_mayor) || 1,
       precio_mayor_ves: Number(formulario.precio_mayor_ves) || 0,
       precio_mayor_usd: Number(formulario.precio_mayor_usd) || 0,
@@ -392,16 +392,20 @@ export default function ModalProducto({
             />
           </div>
 
-          {/* Código SKU (opcional) */}
+          {/* Código SKU (se genera automáticamente) */}
           <div>
-            <label className="mb-1 block text-sm font-medium">Código SKU</label>
+            <label className="mb-1 block text-sm font-medium">
+              Código SKU{' '}
+              <span className="texto-suave font-normal">(se genera automáticamente)</span>
+            </label>
             <input
               name="sku"
               type="text"
               value={formulario.sku}
               onChange={manejarCambio}
-              placeholder="ARR-001"
-              className="campo"
+              placeholder="Se generará al guardar"
+              className="campo bg-gray-50 text-gray-500"
+              readOnly
             />
           </div>
 

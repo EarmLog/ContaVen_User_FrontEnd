@@ -14,6 +14,15 @@ import '../styles/globals.css'
 export const metadata = {
   title: 'ContaVen',
   description: 'Inventario, punto de venta y análisis para tu negocio.',
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
+}
+
+// Datos que el navegador y el teléfono usan para instalar la app
+export const viewport = {
+  themeColor: '#1c62e9',
 }
 
 /*

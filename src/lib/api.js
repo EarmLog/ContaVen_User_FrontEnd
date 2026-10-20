@@ -230,6 +230,21 @@ export function obtenerVentasDelDia() {
   return llamarApi('/analisis/dia')
 }
 
+/**
+ * Trae los productos que NO se han vendido en el periodo indicado.
+ * Sirve para encontrar productos sin movimiento y ofrecerles descuento.
+ */
+export function obtenerProductosSinVender(filtros = {}) {
+  const parametros = new URLSearchParams()
+
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor) parametros.append(clave, valor)
+  }
+
+  const consulta = parametros.toString()
+  return llamarApi(`/analisis/productos-sin-vender${consulta ? `?${consulta}` : ''}`)
+}
+
 // ============================================================
 // CONFIGURACIÓN
 // ============================================================

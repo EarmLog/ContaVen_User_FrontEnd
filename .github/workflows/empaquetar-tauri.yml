@@ -1,16 +1,28 @@
 name: Empaquetar la app de escritorio (Tauri)
 
-# Genera los instaladores de escritorio (.exe, .dmg, .AppImage) de ContaVen.
-# Solo corre si alguien lo lanza a mano (workflow_dispatch), para no gastar
-# minutos de CI en cada push.
+# Genera los instaladores de escritorio de ContaVen y los publica como
+# "release" en GitHub, para que el usuario los pueda descargar y ejecutar
+# directamente sin instalar nada más.
+#
+#   - Windows: instalador .exe (NSIS) y .msi
+#   - Linux:   .AppImage (se ejecuta con doble clic) y .deb
+#   - macOS:   .dmg
+#
+# Se puede lanzar a mano (workflow_dispatch) o al subir una etiqueta que
+# empiece con "v" (por ejemplo v1.0.0).
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   empaquetar:
-    name: Empaquetar con Tauri
+    name: Empaquetar (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -25,12 +37,40 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Guardar la caché de Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Dependencias de Linux (para Tauri)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            curl \
+            wget \
+            file
+
       - name: Instalar dependencias de la web
         run: npm ci
 
-      - name: Empaquetar con Tauri
+      - name: Empaquetar y publicar el release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: npx tauri
+          # Se crea (o actualiza) un release con la etiqueta elegida
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number) }}
+          releaseName: 'ContaVen ${{ github.ref_type == ''tag'' && github.ref_name || github.run_number }}'
+          releaseBody: 'Descarga el instalador de tu sistema y ejecútalo. En Linux usa el .AppImage; en Windows el .exe.'
+          releaseDraft: false
+          prerelease: false

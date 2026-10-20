@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import Aviso from '../../components/ui/Aviso'
+import Captcha from '../../components/Captcha'
 import { useSesion } from '../../context/AuthContext'
 import * as api from '../../lib/api'
 import { validarLogin } from '../../lib/validaciones'
@@ -28,6 +29,10 @@ export default function Login() {
   const [errorGeneral, setErrorGeneral] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [verContrasena, setVerContrasena] = useState(false)
+
+  // --- Estado del captcha ---
+  const [captchaOk, setCaptchaOk] = useState(false)
+  const [reiniciarCaptcha, setReiniciarCaptcha] = useState(0)
 
   // Para pasar a la pantalla de Inicio cuando el login sale bien
   const navegar = useRouter()
@@ -64,6 +69,12 @@ export default function Login() {
     // Si hay algún error de validación se detiene aquí
     if (nuevosErrores.correo || nuevosErrores.contrasena) return
 
+    // Sin el captcha resuelto no se intenta entrar
+    if (!captchaOk) {
+      setErrorGeneral('Escribe el código de seguridad para continuar.')
+      return
+    }
+
     setEnviando(true)
 
     try {
@@ -77,6 +88,9 @@ export default function Login() {
       navegar.replace('/inicio')
     } catch (error) {
       setErrorGeneral(error.message)
+      // Si algo falla, se pide un captcha nuevo por seguridad
+      setCaptchaOk(false)
+      setReiniciarCaptcha((n) => n + 1)
     } finally {
       setEnviando(false)
     }
@@ -156,10 +170,13 @@ export default function Login() {
             </div>
           </div>
 
+          {/* Reto de seguridad para frenar intentos automáticos */}
+          <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
+
           {/* Botón de entrar */}
           <button
             type="submit"
-            disabled={enviando}
+            disabled={enviando || !captchaOk}
             className="w-full rounded-lg bg-marca-600 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? 'Entrando...' : 'Iniciar sesión'}

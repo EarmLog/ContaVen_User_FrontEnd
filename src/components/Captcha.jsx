@@ -62,38 +62,50 @@ export default function Captcha({ alValidar, reiniciar }) {
     const ancho = elemento.width
     const alto = elemento.height
 
-    // Fondo claro
-    ctx.clearRect(0, 0, ancho, alto)
-    ctx.fillStyle = '#f1f5f9'
+    // Fondo con un degradado suave acorde a la marca
+    const fondo = ctx.createLinearGradient(0, 0, ancho, alto)
+    fondo.addColorStop(0, '#eef4ff')
+    fondo.addColorStop(1, '#e0ecff')
+    ctx.fillStyle = fondo
     ctx.fillRect(0, 0, ancho, alto)
 
-    // Líneas de ruido
-    for (let i = 0; i < 6; i += 1) {
-      ctx.strokeStyle = `hsl(${Math.random() * 360}, 60%, 70%)`
+    // Líneas de ruido onduladas
+    for (let i = 0; i < 5; i += 1) {
+      ctx.strokeStyle = `hsla(${210 + Math.random() * 40}, 70%, 60%, 0.5)`
+      ctx.lineWidth = 1 + Math.random()
       ctx.beginPath()
-      ctx.moveTo(Math.random() * ancho, Math.random() * alto)
-      ctx.lineTo(Math.random() * ancho, Math.random() * alto)
+      const yBase = Math.random() * alto
+      ctx.moveTo(0, yBase)
+      ctx.bezierCurveTo(
+        ancho * 0.33, yBase + (Math.random() - 0.5) * 30,
+        ancho * 0.66, yBase + (Math.random() - 0.5) * 30,
+        ancho, yBase,
+      )
       ctx.stroke()
     }
 
     // Puntos de ruido
-    for (let i = 0; i < 30; i += 1) {
-      ctx.fillStyle = `hsl(${Math.random() * 360}, 60%, 60%)`
+    for (let i = 0; i < 40; i += 1) {
+      ctx.fillStyle = `hsla(${210 + Math.random() * 40}, 70%, 55%, 0.45)`
       ctx.beginPath()
-      ctx.arc(Math.random() * ancho, Math.random() * alto, 1.5, 0, Math.PI * 2)
+      ctx.arc(Math.random() * ancho, Math.random() * alto, 1.2, 0, Math.PI * 2)
       ctx.fill()
     }
 
-    // El código, con cada letra un poco torcida
-    const anchoLetra = ancho / (codigo.length + 1)
+    // El código, con cada letra un poco torcida y de distinto color
+    const margen = 14
+    const anchoDisponible = ancho - margen * 2
+    const anchoLetra = anchoDisponible / codigo.length
 
     for (let i = 0; i < codigo.length; i += 1) {
       ctx.save()
-      ctx.font = `bold ${22 + Math.random() * 6}px monospace`
-      ctx.fillStyle = `hsl(${Math.random() * 360}, 55%, 35%)`
-      ctx.translate(anchoLetra * (i + 1), alto / 2)
-      ctx.rotate((Math.random() - 0.5) * 0.5)
-      ctx.fillText(codigo[i], 0, 8)
+      ctx.font = `bold ${26 + Math.random() * 6}px 'Segoe UI', Arial, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = `hsl(${210 + Math.random() * 40}, 65%, 32%)`
+      ctx.translate(margen + anchoLetra * (i + 0.5), alto / 2 + (Math.random() - 0.5) * 6)
+      ctx.rotate((Math.random() - 0.5) * 0.4)
+      ctx.fillText(codigo[i], 0, 0)
       ctx.restore()
     }
   }, [codigo])
@@ -151,28 +163,29 @@ export default function Captcha({ alValidar, reiniciar }) {
 
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium">
+      <label htmlFor={id} className="mb-2 block text-center text-sm font-medium">
         Código de seguridad <span className="text-error-500">*</span>
       </label>
 
-      <div className="flex items-center gap-3">
-        {/* El código dibujado */}
+      {/* El código dibujado, centrado, con el botón de refrescar al lado */}
+      <div className="mb-3 flex items-center justify-center gap-2">
         <canvas
           ref={lienzo}
-          width={130}
-          height={44}
-          className="h-11 rounded-md border border-[var(--borde)]"
+          width={180}
+          height={54}
+          className="h-[54px] w-[180px] rounded-lg border border-[var(--borde)] shadow-sm"
           aria-hidden="true"
         />
 
-        {/* Botón para pedir otro código */}
+        {/* Botón para pedir otro código (icono de refrescar) */}
         <button
           type="button"
           onClick={nuevoReto}
-          className="text-xs texto-suave transition hover:text-[var(--texto)]"
+          aria-label="Generar otro código"
           title="Generar otro código"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--borde)] text-lg texto-suave transition hover:bg-marca-50 hover:text-marca-600"
         >
-          Otro código
+          ↻
         </button>
       </div>
 
@@ -181,17 +194,18 @@ export default function Captcha({ alValidar, reiniciar }) {
         type="text"
         inputMode="text"
         autoComplete="off"
+        maxLength={codigo.length}
         value={escrito}
         onChange={manejarCambio}
         onBlur={alSalir}
-        placeholder="Escribe el código"
-        className={`campo mt-2 uppercase ${
+        placeholder="Escribe el código de la imagen"
+        className={`campo text-center uppercase tracking-[0.3em] ${
           error ? 'border-red-400' : resuelto ? 'border-green-400' : ''
         }`}
       />
 
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      {resuelto && <p className="mt-1 text-xs text-exito-600">¡Correcto!</p>}
+      {error && <p className="mt-1 text-center text-xs text-red-600">{error}</p>}
+      {resuelto && <p className="mt-1 text-center text-xs text-exito-600">¡Correcto!</p>}
     </div>
   )
 }

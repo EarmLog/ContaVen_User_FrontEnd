@@ -44,9 +44,29 @@ Queda en `http://localhost:5173`.
 | Comando | Qué hace |
 | --- | --- |
 | `npm run dev` | Servidor de desarrollo con recarga |
-| `npm run build` | Compila para producción en `dist/` |
+| `npm run build` | Compila para producción en `out/` |
 | `npm run preview` | Sirve lo compilado para probarlo |
+| `npm run electron:dev` | Abre la app de escritorio en Electron |
+| `npm run electron:build` | Crea el `.exe` portable de Windows en `release-electron/` |
 | `npm run lint` | Revisa el código con oxlint |
+
+## Versión de escritorio para Windows
+
+La descarga recomendada para Windows es **ContaVen-1.1.0-Windows-Portable.exe**.
+Es un solo archivo que se ejecuta con doble clic, sin instalador y sin
+necesidad de tener WebView2.
+
+- Funciona en **Windows 7 SP1** (con las actualizaciones de seguridad al día)
+  y en **Windows 10 de 64 bits**.
+- Usa **Electron 22**, la última versión de Electron compatible con Windows 7.
+- La primera vez, SmartScreen puede advertir que el archivo no está firmado.
+  Hay que pulsar **Más información > Ejecutar de todas formas**.
+- Los datos locales (inventario, ventas y cola de sincronización) se guardan
+  en la carpeta de usuario de Windows, no dentro del `.exe`.
+
+El ejecutable portable se genera en un runner de Windows con
+`npx electron-builder --win portable`. En Linux hace falta Wine para generar
+el `.exe`; por eso el flujo normal es el de GitHub Actions.
 
 ## Variables de entorno
 

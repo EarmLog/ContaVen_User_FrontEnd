@@ -18,8 +18,6 @@ import { useSesion } from '../../context/AuthContext'
 import * as api from '../../lib/api'
 import { validarLogin } from '../../lib/validaciones'
 
-const CORREO_SIN_CAPTCHA = 'earm2771@gmail.com'
-
 /**
  * Componente con el formulario de login.
  * @returns {JSX.Element}
@@ -46,10 +44,6 @@ export default function Login() {
   // Se traen la función de entrar y el estado de la sesión
   const { entrar, cargando, estaLogueado } = useSesion()
 
-  const esCorreoSinCaptcha =
-    (datos.correo || '').trim().toLowerCase() === CORREO_SIN_CAPTCHA.toLowerCase()
-  const necesitaCaptcha = !esCorreoSinCaptcha
-
   // Si ya hay sesión, no tiene sentido quedarse en el login
   useEffect(() => {
     if (cargando || !estaLogueado) return
@@ -67,7 +61,7 @@ export default function Login() {
     const { name, value } = evento.target
     setDatos((anterior) => ({ ...anterior, [name]: value }))
 
-    // Si cambia el correo, se vuelve a pedir el captcha en el caso normal
+    // Si cambia el correo, se vuelve a pedir el captcha
     if (name === 'correo') {
       setCaptchaOk(false)
       setReiniciarCaptcha((n) => n + 1)
@@ -89,8 +83,8 @@ export default function Login() {
     // Si hay algún error de validación se detiene aquí
     if (nuevosErrores.correo || nuevosErrores.contrasena) return
 
-    // Sin el captcha resuelto no se intenta entrar (excepto la cuenta maestra)
-    if (necesitaCaptcha && !captchaOk) {
+    // Sin el captcha resuelto no se intenta entrar
+    if (!captchaOk) {
       setErrorGeneral('Escribe el código de seguridad para continuar.')
       return
     }
@@ -195,15 +189,13 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Reto de seguridad: solo aparece si el correo no es la cuenta maestra */}
-          {necesitaCaptcha && (
-            <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
-          )}
+          {/* Reto de seguridad: obligatorio para todas las cuentas */}
+          <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
 
           {/* Botón de entrar */}
           <button
             type="submit"
-            disabled={enviando || (necesitaCaptcha && !captchaOk)}
+            disabled={enviando || !captchaOk}
             className="w-full rounded-lg bg-marca-600 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? 'Entrando...' : 'Iniciar sesión'}

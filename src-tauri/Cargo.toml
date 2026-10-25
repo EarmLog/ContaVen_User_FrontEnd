@@ -1,6 +1,6 @@
 [package]
 name = "contaven"
-version = "1.0.0"
+version = "1.1.0"
 description = "ContaVen - App de usuarios (inventario, POS y análisis) empaquetada con Tauri"
 authors = ["ContaVen"]
 edition = "2021"

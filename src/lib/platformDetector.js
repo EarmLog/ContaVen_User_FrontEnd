@@ -7,6 +7,9 @@
  *   - Tauri (escritorio)  -> los datos locales viven en SQLite
  *   - Capacitor (Android) -> los datos locales viven en SQLite
  *
+ * La versión portable de Windows usa Electron y se comporta como "web":
+ * guarda los datos en IndexedDB, sin necesidad del plugin SQLite.
+ *
  * Con esto el dbAdapter sabe qué motor de base de datos local usar.
  */
 

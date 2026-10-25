@@ -45,3 +45,6 @@ android/app/build
 android/build
 android/.gradle
 android/local.properties
+
+# Salida del empaquetado de Electron
+release-electron

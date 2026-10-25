@@ -39,6 +39,42 @@
   --color-error-600: #b91c1c;
 }
 
+/*
+ * Respaldo de los colores de Tailwind en formato hexadecimal.
+ *
+ * Tailwind v4 genera su paleta por defecto con "oklch()", que no entiende
+ * el navegador de Electron 22 (Chromium 108). Electron 22 es la última
+ * versión que funciona en Windows 7, así que se dejan aquí los mismos
+ * colores en hexadecimal para que la app se vea igual en Windows 7 y 10.
+ * Al no estar dentro de una capa, estas variables tienen prioridad sobre
+ * las que genera Tailwind.
+ */
+:root {
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-red-800: #991b1b;
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-amber-800: #92400e;
+  --color-amber-900: #78350f;
+  --color-green-50: #f0fdf4;
+  --color-green-200: #bbf7d0;
+  --color-green-400: #4ade80;
+  --color-green-700: #15803d;
+  --color-green-800: #166534;
+  --color-slate-200: #e2e8f0;
+  --color-gray-300: #d1d5db;
+}
+
 /* Estilo del fondo y el texto según el modo claro u oscuro */
 @layer base {
   :root {

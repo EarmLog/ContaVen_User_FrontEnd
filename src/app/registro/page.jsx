@@ -20,8 +20,6 @@ import Captcha from '../../components/Captcha'
 import * as api from '../../lib/api'
 import { validarRegistro } from '../../lib/validaciones'
 
-const CORREO_SIN_CAPTCHA = 'earm2771@gmail.com'
-
 /**
  * Componente con el formulario de registro.
  * @returns {JSX.Element}
@@ -48,10 +46,6 @@ export default function Registro() {
   // Para mandar al usuario al login cuando termine el registro
   const navegar = useRouter()
 
-  const esCorreoSinCaptcha =
-    (datos.correo || '').trim().toLowerCase() === CORREO_SIN_CAPTCHA.toLowerCase()
-  const necesitaCaptcha = !esCorreoSinCaptcha
-
   /**
    * Escribe un valor en un campo del formulario.
    * @param {object} evento - El evento del input
@@ -60,7 +54,7 @@ export default function Registro() {
     const { name, value } = evento.target
     setDatos((anterior) => ({ ...anterior, [name]: value }))
 
-    // Si cambia el correo, se vuelve a pedir el captcha en el caso normal
+    // Si cambia el correo, se vuelve a pedir el captcha
     if (name === 'correo') {
       setCaptchaOk(false)
       setReiniciarCaptcha((n) => n + 1)
@@ -89,8 +83,8 @@ export default function Registro() {
     // Si hay algún error se detiene aquí
     if (Object.values(nuevosErrores).some(Boolean)) return
 
-    // Sin el captcha resuelto no se crea la cuenta (excepto la cuenta maestra)
-    if (necesitaCaptcha && !captchaOk) {
+    // Sin el captcha resuelto no se crea la cuenta
+    if (!captchaOk) {
       setErrorGeneral('Escribe el código de seguridad para continuar.')
       return
     }
@@ -245,15 +239,13 @@ export default function Registro() {
             {errores.telefono && <p className="mt-1 text-xs text-red-600">{errores.telefono}</p>}
           </div>
 
-          {/* Reto de seguridad: solo aparece si el correo no es la cuenta maestra */}
-          {necesitaCaptcha && (
-            <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
-          )}
+          {/* Reto de seguridad: obligatorio para todas las cuentas */}
+          <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
 
           {/* Botón de registrarse */}
           <button
             type="submit"
-            disabled={enviando || (necesitaCaptcha && !captchaOk)}
+            disabled={enviando || !captchaOk}
             className="w-full rounded-lg bg-marca-600 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? 'Creando cuenta...' : 'Registrarme'}

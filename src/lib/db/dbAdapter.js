@@ -4,7 +4,8 @@
  *
  * Idea general (arquitectura híbrida):
  *   - Cada dispositivo guarda su propia copia del inventario y las ventas
- *     en una base local (IndexedDB en el navegador, SQLite en Tauri/Android).
+ *     en una base local (IndexedDB en el navegador y en Electron, SQLite en
+ *     Tauri/Android).
  *   - Cuando hay internet, los cambios se mandan al backend Flask y se baja
  *     la copia del servidor.
  *   - Cuando NO hay internet, los cambios se aplican igual a la base local

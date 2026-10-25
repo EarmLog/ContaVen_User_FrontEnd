@@ -30,6 +30,8 @@ const PRODUCTO_VACIO = {
   nombre: '',
   stock: '',
   tipo: '',
+  marca: '',
+  variante: '',
   descripcion: '',
   sku: '',
   precio_ves: '',
@@ -79,6 +81,8 @@ function datosIniciales(producto) {
     nombre: producto.nombre || '',
     stock: String(producto.stock ?? ''),
     tipo: producto.tipo || '',
+    marca: producto.marca || '',
+    variante: producto.variante || '',
     descripcion: producto.descripcion || '',
     sku: producto.sku || '',
     precio_ves: String(producto.precio_ves ?? ''),
@@ -119,6 +123,25 @@ function datosIniciales(producto) {
   }
 }
 
+function limpiarTextoSKU(texto = '') {
+  return (texto || '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+}
+
+function generarSkuPreview({ nombre = '', tipo = '', marca = '', variante = '' } = {}) {
+  const limpioNombre = limpiarTextoSKU(nombre)
+  const base = (limpioNombre.slice(0, 3) || 'PRD')
+  let extra = limpiarTextoSKU(marca)
+  if (!extra) extra = limpiarTextoSKU(variante)
+  if (!extra) extra = limpiarTextoSKU(tipo)
+  if (extra) return `${base}-${extra.slice(0, 3)}-###`
+  return `${base}-###`
+}
+
 /**
  * Ventana para registrar o editar un producto.
  * @param {object} props - { abierto, producto, tasa, modo, guardando, alGuardar, alCerrar }
@@ -146,6 +169,13 @@ export default function ModalProducto({
   )
 
   const esBulto = modo === 'bulto'
+
+  const skuPreview = generarSkuPreview({
+    nombre: formulario.nombre,
+    tipo: formulario.tipo,
+    marca: formulario.marca,
+    variante: formulario.variante,
+  })
 
   // Valores derivados del modo bulto: el precio por unidad y la ganancia
   // se calculan solos a partir del precio del bulto.
@@ -293,8 +323,10 @@ export default function ModalProducto({
       nombre: formulario.nombre.trim(),
       stock: Number(formulario.stock),
       tipo: formulario.tipo.trim(),
+      marca: formulario.marca.trim(),
+      variante: formulario.variante.trim(),
       descripcion: formulario.descripcion.trim(),
-          sku: formulario.sku.trim() || null, // Se genera automáticamente si está vacío
+      sku: formulario.sku.trim() || null, // Se genera automáticamente si está vacío
       cantidad_mayor: Number(formulario.cantidad_mayor) || 1,
       precio_mayor_ves: Number(formulario.precio_mayor_ves) || 0,
       precio_mayor_usd: Number(formulario.precio_mayor_usd) || 0,
@@ -392,21 +424,54 @@ export default function ModalProducto({
             />
           </div>
 
-          {/* Código SKU (se genera automáticamente) */}
+          {/* Marca (opcional) */}
           <div>
+            <label className="mb-1 block text-sm font-medium">Marca</label>
+            <input
+              name="marca"
+              type="text"
+              value={formulario.marca}
+              onChange={manejarCambio}
+              placeholder="Marca del producto"
+              className="campo"
+            />
+          </div>
+
+          {/* Variante (opcional) */}
+          <div>
+            <label className="mb-1 block text-sm font-medium">Variante / Presentación</label>
+            <input
+              name="variante"
+              type="text"
+              value={formulario.variante}
+              onChange={manejarCambio}
+              placeholder="Sabor, color, tamaño..."
+              className="campo"
+            />
+          </div>
+
+          {/* Código SKU (se genera automáticamente) */}
+          <div className="sm:col-span-2">
             <label className="mb-1 block text-sm font-medium">
               Código SKU{' '}
-              <span className="texto-suave font-normal">(se genera automáticamente)</span>
+              <span className="texto-suave font-normal">(se genera automáticamente con nombre/marca/variante)</span>
             </label>
-            <input
-              name="sku"
-              type="text"
-              value={formulario.sku}
-              onChange={manejarCambio}
-              placeholder="Se generará al guardar"
-              className="campo bg-gray-50 text-gray-500"
-              readOnly
-            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                name="sku"
+                type="text"
+                value={formulario.sku}
+                onChange={manejarCambio}
+                placeholder={producto ? 'Dejar vacío para regenerar' : skuPreview}
+                className="campo flex-1"
+              />
+              <div className="rounded-lg border border-[var(--borde)] px-3 py-2 text-xs texto-suave">
+                Vista previa: <span className="font-mono font-semibold text-[var(--texto)]">{skuPreview}</span>
+              </div>
+            </div>
+            <p className="mt-1 text-xs texto-suave">
+              Si lo dejas vacío, el backend lo genera automáticamente al guardar.
+            </p>
           </div>
 
           {/* Descripción (opcional) */}

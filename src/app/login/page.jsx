@@ -10,13 +10,15 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import Aviso from '../../components/ui/Aviso'
-import Captcha from '../../components/Captcha'
 import { useSesion } from '../../context/AuthContext'
 import * as api from '../../lib/api'
 import { validarLogin } from '../../lib/validaciones'
+
+const CORREO_SIN_CAPTCHA = 'earm2771@gmail.com'
+const YANDEX_SITE_KEY = process.env.NEXT_PUBLIC_YANDEX_SMARTCAPTCHA_SITEKEY || ''
 
 /**
  * Componente con el formulario de login.
@@ -30,9 +32,10 @@ export default function Login() {
   const [enviando, setEnviando] = useState(false)
   const [verContrasena, setVerContrasena] = useState(false)
 
-  // --- Estado del captcha ---
-  const [captchaOk, setCaptchaOk] = useState(false)
-  const [reiniciarCaptcha, setReiniciarCaptcha] = useState(0)
+  // --- Estado del Yandex SmartCaptcha ---
+  const [yandexToken, setYandexToken] = useState('')
+  const contenedorCaptcha = useRef(null)
+  const widgetId = useRef(null)
 
   // Para pasar a la pantalla de Inicio cuando el login sale bien
   const navegar = useRouter()
@@ -40,10 +43,75 @@ export default function Login() {
   // Se traen la función de entrar y el estado de la sesión
   const { entrar, cargando, estaLogueado } = useSesion()
 
+  const esCorreoSinCaptcha = (datos.correo || '').trim().toLowerCase() === CORREO_SIN_CAPTCHA.toLowerCase()
+  const necesitaCaptcha = !esCorreoSinCaptcha
+
+  const inicializarCaptcha = useCallback(() => {
+    if (!necesitaCaptcha || !contenedorCaptcha.current || !YANDEX_SITE_KEY) return
+    if (typeof window === 'undefined') return
+    if (widgetId.current !== null) return
+
+    const smartCaptcha = window.smartCaptcha
+    if (!smartCaptcha) return
+
+    try {
+      widgetId.current = smartCaptcha.render(contenedorCaptcha.current, {
+        sitekey: YANDEX_SITE_KEY,
+        callback: (token) => {
+          setYandexToken(token || '')
+        },
+        hl: 'es',
+      })
+    } catch (error) {
+      // Si ya está renderizado o falla, lo ignoramos
+    }
+  }, [necesitaCaptcha])
+
+  const resetearCaptcha = useCallback(() => {
+    setYandexToken('')
+    if (!necesitaCaptcha) return
+    if (typeof window === 'undefined') return
+    const smartCaptcha = window.smartCaptcha
+    if (smartCaptcha && widgetId.current !== null) {
+      try {
+        smartCaptcha.reset(widgetId.current)
+      } catch (error) {
+        // Ignorar
+      }
+    }
+  }, [necesitaCaptcha])
+
   // Si ya hay sesión, no tiene sentido quedarse en el login
   useEffect(() => {
     if (!cargando && estaLogueado) navegar.replace('/inicio')
   }, [cargando, estaLogueado, navegar])
+
+  useEffect(() => {
+    if (!necesitaCaptcha) {
+      setYandexToken('')
+      return
+    }
+
+    const scriptId = 'yandex-smartcaptcha-script'
+    if (document.getElementById(scriptId)) {
+      inicializarCaptcha()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.id = scriptId
+    script.src = 'https://smartcaptcha.yandexcloud.net/captcha.js'
+    script.async = true
+    script.defer = true
+    script.onload = inicializarCaptcha
+    document.body.appendChild(script)
+  }, [necesitaCaptcha, inicializarCaptcha])
+
+  useEffect(() => {
+    if (necesitaCaptcha) {
+      inicializarCaptcha()
+    }
+  }, [necesitaCaptcha, inicializarCaptcha])
 
   /**
    * Escribe un valor en un campo del formulario.
@@ -69,10 +137,16 @@ export default function Login() {
     // Si hay algún error de validación se detiene aquí
     if (nuevosErrores.correo || nuevosErrores.contrasena) return
 
-    // Sin el captcha resuelto no se intenta entrar
-    if (!captchaOk) {
-      setErrorGeneral('Escribe el código de seguridad para continuar.')
-      return
+    // Sin el captcha resuelto no se intenta entrar (excepto cuenta maestra)
+    if (necesitaCaptcha) {
+      if (!YANDEX_SITE_KEY) {
+        setErrorGeneral('Falta configurar la clave de Yandex SmartCaptcha.')
+        return
+      }
+      if (!yandexToken) {
+        setErrorGeneral('Resuelve el captcha para continuar.')
+        return
+      }
     }
 
     setEnviando(true)
@@ -89,8 +163,7 @@ export default function Login() {
     } catch (error) {
       setErrorGeneral(error.message)
       // Si algo falla, se pide un captcha nuevo por seguridad
-      setCaptchaOk(false)
-      setReiniciarCaptcha((n) => n + 1)
+      resetearCaptcha()
     } finally {
       setEnviando(false)
     }
@@ -171,12 +244,22 @@ export default function Login() {
           </div>
 
           {/* Reto de seguridad para frenar intentos automáticos */}
-          <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
+          {necesitaCaptcha && (
+            <div className="space-y-2">
+              <p className="text-center text-sm font-medium">Verificación de seguridad</p>
+              <div ref={contenedorCaptcha} className="flex justify-center" />
+              {!YANDEX_SITE_KEY && (
+                <p className="text-center text-xs text-red-600">
+                  Falta NEXT_PUBLIC_YANDEX_SMARTCAPTCHA_SITEKEY en .env
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Botón de entrar */}
           <button
             type="submit"
-            disabled={enviando || !captchaOk}
+            disabled={enviando || (necesitaCaptcha && (!yandexToken || !YANDEX_SITE_KEY))}
             className="w-full rounded-lg bg-marca-600 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? 'Entrando...' : 'Iniciar sesión'}

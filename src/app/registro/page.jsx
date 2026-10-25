@@ -13,14 +13,14 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
 import Aviso from '../../components/ui/Aviso'
+import Captcha from '../../components/Captcha'
 import * as api from '../../lib/api'
 import { validarRegistro } from '../../lib/validaciones'
 
 const CORREO_SIN_CAPTCHA = 'earm2771@gmail.com'
-const YANDEX_SITE_KEY = process.env.NEXT_PUBLIC_YANDEX_SMARTCAPTCHA_SITEKEY || ''
 
 /**
  * Componente con el formulario de registro.
@@ -41,78 +41,16 @@ export default function Registro() {
   const [enviando, setEnviando] = useState(false)
   const [verContrasena, setVerContrasena] = useState(false)
 
-  // --- Estado del Yandex SmartCaptcha ---
-  const [yandexToken, setYandexToken] = useState('')
-  const contenedorCaptcha = useRef(null)
-  const widgetId = useRef(null)
+  // --- Estado del captcha ---
+  const [captchaOk, setCaptchaOk] = useState(false)
+  const [reiniciarCaptcha, setReiniciarCaptcha] = useState(0)
 
   // Para mandar al usuario al login cuando termine el registro
   const navegar = useRouter()
 
-  const esCorreoSinCaptcha = (datos.correo || '').trim().toLowerCase() === CORREO_SIN_CAPTCHA.toLowerCase()
+  const esCorreoSinCaptcha =
+    (datos.correo || '').trim().toLowerCase() === CORREO_SIN_CAPTCHA.toLowerCase()
   const necesitaCaptcha = !esCorreoSinCaptcha
-
-  const inicializarCaptcha = useCallback(() => {
-    if (!necesitaCaptcha || !contenedorCaptcha.current || !YANDEX_SITE_KEY) return
-    if (typeof window === 'undefined') return
-    if (widgetId.current !== null) return
-
-    const smartCaptcha = window.smartCaptcha
-    if (!smartCaptcha) return
-
-    try {
-      widgetId.current = smartCaptcha.render(contenedorCaptcha.current, {
-        sitekey: YANDEX_SITE_KEY,
-        callback: (token) => {
-          setYandexToken(token || '')
-        },
-        hl: 'es',
-      })
-    } catch (error) {
-      // Ignorar
-    }
-  }, [necesitaCaptcha])
-
-  const resetearCaptcha = useCallback(() => {
-    setYandexToken('')
-    if (!necesitaCaptcha) return
-    if (typeof window === 'undefined') return
-    const smartCaptcha = window.smartCaptcha
-    if (smartCaptcha && widgetId.current !== null) {
-      try {
-        smartCaptcha.reset(widgetId.current)
-      } catch (error) {
-        // Ignorar
-      }
-    }
-  }, [necesitaCaptcha])
-
-  useEffect(() => {
-    if (!necesitaCaptcha) {
-      setYandexToken('')
-      return
-    }
-
-    const scriptId = 'yandex-smartcaptcha-script'
-    if (document.getElementById(scriptId)) {
-      inicializarCaptcha()
-      return
-    }
-
-    const script = document.createElement('script')
-    script.id = scriptId
-    script.src = 'https://smartcaptcha.yandexcloud.net/captcha.js'
-    script.async = true
-    script.defer = true
-    script.onload = inicializarCaptcha
-    document.body.appendChild(script)
-  }, [necesitaCaptcha, inicializarCaptcha])
-
-  useEffect(() => {
-    if (necesitaCaptcha) {
-      inicializarCaptcha()
-    }
-  }, [necesitaCaptcha, inicializarCaptcha])
 
   /**
    * Escribe un valor en un campo del formulario.
@@ -121,6 +59,12 @@ export default function Registro() {
   function manejarCambio(evento) {
     const { name, value } = evento.target
     setDatos((anterior) => ({ ...anterior, [name]: value }))
+
+    // Si cambia el correo, se vuelve a pedir el captcha en el caso normal
+    if (name === 'correo') {
+      setCaptchaOk(false)
+      setReiniciarCaptcha((n) => n + 1)
+    }
   }
 
   /**
@@ -145,16 +89,10 @@ export default function Registro() {
     // Si hay algún error se detiene aquí
     if (Object.values(nuevosErrores).some(Boolean)) return
 
-    // Sin el captcha resuelto no se crea la cuenta (excepto cuenta maestra)
-    if (necesitaCaptcha) {
-      if (!YANDEX_SITE_KEY) {
-        setErrorGeneral('Falta configurar la clave de Yandex SmartCaptcha.')
-        return
-      }
-      if (!yandexToken) {
-        setErrorGeneral('Resuelve el captcha para continuar.')
-        return
-      }
+    // Sin el captcha resuelto no se crea la cuenta (excepto la cuenta maestra)
+    if (necesitaCaptcha && !captchaOk) {
+      setErrorGeneral('Escribe el código de seguridad para continuar.')
+      return
     }
 
     setEnviando(true)
@@ -174,7 +112,8 @@ export default function Registro() {
     } catch (error) {
       setErrorGeneral(error.message)
       // Si algo falla, se pide un captcha nuevo por seguridad
-      resetearCaptcha()
+      setCaptchaOk(false)
+      setReiniciarCaptcha((n) => n + 1)
     } finally {
       setEnviando(false)
     }
@@ -306,23 +245,15 @@ export default function Registro() {
             {errores.telefono && <p className="mt-1 text-xs text-red-600">{errores.telefono}</p>}
           </div>
 
-          {/* Reto de seguridad para frenar cuentas automáticas */}
+          {/* Reto de seguridad: solo aparece si el correo no es la cuenta maestra */}
           {necesitaCaptcha && (
-            <div className="space-y-2">
-              <p className="text-center text-sm font-medium">Verificación de seguridad</p>
-              <div ref={contenedorCaptcha} className="flex justify-center" />
-              {!YANDEX_SITE_KEY && (
-                <p className="text-center text-xs text-red-600">
-                  Falta NEXT_PUBLIC_YANDEX_SMARTCAPTCHA_SITEKEY en .env
-                </p>
-              )}
-            </div>
+            <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
           )}
 
           {/* Botón de registrarse */}
           <button
             type="submit"
-            disabled={enviando || (necesitaCaptcha && (!yandexToken || !YANDEX_SITE_KEY))}
+            disabled={enviando || (necesitaCaptcha && !captchaOk)}
             className="w-full rounded-lg bg-marca-600 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? 'Creando cuenta...' : 'Registrarme'}

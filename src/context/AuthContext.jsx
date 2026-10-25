@@ -17,6 +17,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 
 import * as api from '../lib/api'
+import { sincronizarEnSilencio } from '../lib/db/dbAdapter'
 import supabase from '../lib/supabaseClient'
 
 // Se crea el contexto que se va a compartir en toda la app
@@ -147,6 +148,11 @@ export function ProveedorSesion({ children }) {
   async function entrar(nuevaSesion) {
     setSesion(nuevaSesion)
     await cargarDatosUsuario()
+
+    // Se baja el inventario del servidor antes de entrar a la app, para
+    // que las pantallas no aparezcan vacías en el primer inicio de sesión.
+    // Si falla (por ejemplo, sin internet) no se bloquea la entrada.
+    await sincronizarEnSilencio()
   }
 
   /**

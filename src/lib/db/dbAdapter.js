@@ -25,6 +25,9 @@ import { crearMotorSqlite } from './sqliteSchema'
 // Motor de base local activo y si ya se inicializó
 let motor = null
 let iniciado = false
+// Promesa de la apertura en curso, para que dos llamadas a la vez no abran
+// la base dos veces.
+let iniciando = null
 
 // ============================================================
 // MOTOR EN MEMORIA (respaldo)
@@ -86,24 +89,33 @@ function crearMotorMemoria() {
  */
 export async function iniciarAdaptador() {
   if (iniciado) return
+  if (iniciando) return iniciando
 
-  const plataforma = detectarPlataforma()
+  iniciando = (async () => {
+    const plataforma = detectarPlataforma()
+
+    try {
+      if (plataforma === 'tauri' || plataforma === 'capacitor') {
+        motor = await crearMotorSqlite(plataforma)
+      } else {
+        motor = await crearMotorDexie()
+      }
+    } catch (error) {
+      console.warn(
+        'No se pudo abrir la base de datos local; se usa una temporal en memoria.',
+        error,
+      )
+      motor = crearMotorMemoria()
+    }
+
+    iniciado = true
+  })()
 
   try {
-    if (plataforma === 'tauri' || plataforma === 'capacitor') {
-      motor = await crearMotorSqlite(plataforma)
-    } else {
-      motor = await crearMotorDexie()
-    }
-  } catch (error) {
-    console.warn(
-      'No se pudo abrir la base de datos local; se usa una temporal en memoria.',
-      error,
-    )
-    motor = crearMotorMemoria()
+    await iniciando
+  } finally {
+    iniciando = null
   }
-
-  iniciado = true
 }
 
 /**
@@ -136,6 +148,8 @@ function datosDeProducto(datos) {
     nombre: datos.nombre || '',
     stock: Number(datos.stock) || 0,
     tipo: datos.tipo || null,
+    marca: datos.marca || null,
+    variante: datos.variante || null,
     descripcion: datos.descripcion || null,
     sku: datos.sku || null,
     precio_ves: Number(datos.precio_ves) || 0,
@@ -208,10 +222,12 @@ export async function crearProducto(datos) {
 
   try {
     const respuesta = await api.crearProducto(limpios)
+    // Se guarda lo que devolvió el servidor, porque ahí ya viene el SKU
+    // generado cuando el usuario dejó ese campo vacío.
     const producto = {
       id_local: idLocal,
       id_servidor: respuesta.producto.id,
-      ...limpios,
+      ...datosDeProducto(respuesta.producto),
       sincronizado: true,
     }
     await m.escribirProductos([producto])
@@ -245,8 +261,13 @@ export async function editarProducto(idLocal, datos) {
   // Si el producto ya existe en el servidor se intenta editar allá primero
   if (actual.id_servidor) {
     try {
-      await api.editarProducto(actual.id_servidor, limpios)
-      const actualizado = { ...actual, ...limpios, sincronizado: true }
+      const respuesta = await api.editarProducto(actual.id_servidor, limpios)
+      // Igual que al crear: se toma el SKU que calculó el servidor
+      const actualizado = {
+        ...actual,
+        ...datosDeProducto(respuesta?.producto || limpios),
+        sincronizado: true,
+      }
       await m.escribirProductos([actualizado])
       return { producto: exponerProducto(actualizado), sincronizado: true }
     } catch (error) {

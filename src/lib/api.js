@@ -35,6 +35,16 @@ export async function obtenerToken() {
 }
 
 /**
+ * Dice si hay una sesión iniciada.
+ * Sirve para no llamar a la API cuando la app está en el login o el
+ * registro, porque esas llamadas terminarían en un 401 innecesario.
+ * @returns {Promise<boolean>}
+ */
+export async function haySesion() {
+  return Boolean(await obtenerToken())
+}
+
+/**
  * Hace una llamada a la API del backend.
  * @param {string} ruta   - Ejemplo: "/productos"
  * @param {object} opciones - { metodo, cuerpo }

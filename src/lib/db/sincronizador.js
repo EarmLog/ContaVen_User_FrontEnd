@@ -11,6 +11,7 @@
  * datos nuevos o de que ya no hay pendientes.
  */
 
+import { haySesion } from '../api'
 import { contarPendientes, sincronizarEnSilencio } from './dbAdapter'
 
 // Cada cuánto se reintenta sola la sincronización (en milisegundos)
@@ -44,6 +45,9 @@ async function intentarSincronizar() {
     return
   }
 
+  // Sin sesión no hay nada que sincronizar (y el servidor respondería 401)
+  if (!(await haySesion())) return
+
   const resultado = await sincronizarEnSilencio()
   if (resultado) await avisar(await contarPendientes())
 }
@@ -58,7 +62,8 @@ export function iniciarSincronizador(onCambio) {
 
   funcionAviso = onCambio || null
 
-  // Se intenta una vez al arrancar
+  // Se intenta una vez al arrancar. Si no hay sesión (por ejemplo, en el
+  // login) la función lo detecta y no llama a la API.
   intentarSincronizar()
 
   // Cuando vuelve el internet se intenta de inmediato

@@ -453,19 +453,6 @@ export default function ModalProducto({
             />
           </div>
 
-          {/* Variante (opcional) */}
-          <div>
-            <label className="mb-1 block text-sm font-medium">Variante / Presentación</label>
-            <input
-              name="variante"
-              type="text"
-              value={formulario.variante}
-              onChange={manejarCambio}
-              placeholder="Sabor, color, tamaño..."
-              className="campo"
-            />
-          </div>
-
           {/* Código SKU (se genera automáticamente) */}
           <div className="sm:col-span-2">
             <label className="mb-1 block text-sm font-medium">

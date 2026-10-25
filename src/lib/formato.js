@@ -78,6 +78,36 @@ export function fechaLegible(fechaIso) {
 }
 
 /**
+ * Muestra una fecha corta sin correrse de día: "25/10/2026".
+ *
+ * Las fechas que llegan como "AAAA-MM-DD" (por ejemplo la fecha de una
+ * venta) no se pasan por new Date(), porque JavaScript las interpreta como
+ * medianoche UTC y en Venezuela se verían un día antes.
+ * @param {string} valor - Fecha ISO, timestamp o "AAAA-MM-DD"
+ * @returns {string}
+ */
+export function fechaCorta(valor) {
+  if (!valor) return '—'
+
+  const texto = String(valor)
+
+  // Fecha sin hora: se arma a mano para no cambiar de día por la zona horaria
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+    const [anio, mes, dia] = texto.split('-')
+    return `${dia}/${mes}/${anio}`
+  }
+
+  const fecha = new Date(texto)
+  if (Number.isNaN(fecha.getTime())) return '—'
+
+  return fecha.toLocaleDateString('es-VE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+/**
  * Devuelve la fecha de hoy en formato AAAA-MM-DD.
  * @returns {string}
  */

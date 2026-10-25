@@ -17,7 +17,8 @@
  * necesitan medir el navegador para dibujarse.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Bar,
   BarChart,
@@ -37,8 +38,14 @@ import {
 import * as api from '../../../lib/api'
 import Aviso from '../../../components/ui/Aviso'
 import Cargando from '../../../components/ui/Cargando'
-import ModalDescuento from '../../../components/ModalDescuento'
-import { fechaDeHoy, fechaHaceDias, formatearUsd, formatearVes, redondear } from '../../../lib/formato'
+import {
+  fechaCorta,
+  fechaDeHoy,
+  fechaHaceDias,
+  formatearUsd,
+  formatearVes,
+  redondear,
+} from '../../../lib/formato'
 
 // Colores para las gráficas
 const COLORES = ['#3182f6', '#16a34a', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#ef4444']
@@ -48,6 +55,11 @@ const COLORES = ['#3182f6', '#16a34a', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4
  * @returns {JSX.Element}
  */
 export default function AnalisisContenido() {
+  const router = useRouter()
+
+  // Referencia para bajar hasta las gráficas cuando se pulsa "Ver gráficas"
+  const refAnalisisProducto = useRef(null)
+
   // --- Estado de la pantalla ---
   const [datos, setDatos] = useState(null)
   const [cargando, setCargando] = useState(true)
@@ -58,9 +70,11 @@ export default function AnalisisContenido() {
   const [productosSinVender, setProductosSinVender] = useState([])
   const [cargandoSinVender, setCargandoSinVender] = useState(false)
 
-  // --- Estado del modal de descuento ---
-  const [productoDescuento, setProductoDescuento] = useState(null)
-  const [guardandoDescuento, setGuardandoDescuento] = useState(false)
+  // --- Estado del análisis de un solo producto ---
+  const [idProductoSeleccionado, setIdProductoSeleccionado] = useState('')
+  const [analisisProducto, setAnalisisProducto] = useState(null)
+  const [cargandoProducto, setCargandoProducto] = useState(false)
+  const [errorProducto, setErrorProducto] = useState('')
 
   // --- Estado de los filtros ---
   const [filtros, setFiltros] = useState({
@@ -97,6 +111,31 @@ export default function AnalisisContenido() {
     }
   }, [])
 
+  /**
+   * Pide al backend las gráficas de un producto con los filtros indicados.
+   * @param {number|string} id - El id del producto en el servidor
+   * @param {object} filtrosAAplicar - Los filtros que se mandan
+   */
+  const cargarProducto = useCallback(async (id, filtrosAAplicar) => {
+    if (!id) {
+      setAnalisisProducto(null)
+      return
+    }
+
+    setCargandoProducto(true)
+    setErrorProducto('')
+
+    try {
+      const respuesta = await api.obtenerAnalisisProducto(id, filtrosAAplicar)
+      setAnalisisProducto(respuesta)
+    } catch (errorCarga) {
+      setErrorProducto(errorCarga.message)
+      setAnalisisProducto(null)
+    } finally {
+      setCargandoProducto(false)
+    }
+  }, [])
+
   // Se carga el reporte al abrir la pantalla
   useEffect(() => {
     cargarReporte(filtros)
@@ -118,6 +157,9 @@ export default function AnalisisContenido() {
    */
   function aplicarFiltros() {
     cargarReporte(filtros)
+
+    // Si hay un producto seleccionado, se actualizan también sus gráficas
+    if (idProductoSeleccionado) cargarProducto(idProductoSeleccionado, filtros)
   }
 
   /**
@@ -140,30 +182,94 @@ export default function AnalisisContenido() {
   }
 
   /**
-   * Abre el modal para ponerle descuento a un producto sin ventas.
-   * @param {object} producto - El producto seleccionado
+   * Cambia el producto que se está analizando en las gráficas.
+   * @param {object} evento - El evento del selector
    */
-  function abrirDescuento(producto) {
-    setProductoDescuento(producto)
+  function seleccionarProducto(evento) {
+    const id = evento.target.value
+    setIdProductoSeleccionado(id)
+
+    if (id) {
+      cargarProducto(id, filtros)
+    } else {
+      setAnalisisProducto(null)
+    }
   }
 
   /**
-   * Guarda el descuento de un producto y refresca la lista.
-   * @param {number} id - El id del producto
-   * @param {object} descuento - { porcentaje, desde }
+   * Muestra las gráficas de un producto y baja hasta esa sección.
+   * @param {object} producto - Producto de la lista de vendidos o sin vender
    */
-  async function guardarDescuento(id, descuento) {
-    setGuardandoDescuento(true)
+  function verGraficas(producto) {
+    // En "más vendidos" el id del servidor viene como producto_id;
+    // en "sin vender" viene como id.
+    const id = producto.producto_id || producto.id
+    if (!id) return
 
-    try {
-      await api.editarProducto(id, descuento)
-      setProductoDescuento(null)
-      await cargarSinVender()
-    } catch (errorGuardar) {
-      setError(errorGuardar.message)
-    } finally {
-      setGuardandoDescuento(false)
-    }
+    setIdProductoSeleccionado(String(id))
+    cargarProducto(id, filtros)
+
+    window.requestAnimationFrame(() => {
+      refAnalisisProducto.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
+  }
+
+  /**
+   * Lleva al inventario y abre la ventana de edición de un producto.
+   * @param {number} idServidor - El id del producto en el servidor
+   * @param {boolean} oferta - Si true, abre directo en la parte de ofertas
+   */
+  function irAInventario(idServidor, oferta = false) {
+    if (!idServidor) return
+
+    const parametroOferta = oferta ? '&oferta=1' : ''
+    router.push(`/inventario/?editar=${idServidor}${parametroOferta}`)
+  }
+
+  /**
+   * Botones de acción que se repiten en las dos listas.
+   * @param {number} idServidor - Id del producto en el servidor (null si fue borrado)
+   * @param {Function} alVerGraficas - Qué hacer al pulsar "Gráficas"
+   * @returns {JSX.Element}
+   */
+  function botonesDeAccion(idServidor, alVerGraficas) {
+    const sinProducto = !idServidor
+    const titulo = sinProducto ? 'Este producto ya no existe en el inventario' : undefined
+
+    return (
+      <div className="flex justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={alVerGraficas}
+          disabled={sinProducto}
+          title={titulo}
+          className="rounded-md border border-[var(--borde)] px-2.5 py-1 text-xs font-medium transition hover:bg-marca-50 hover:text-marca-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Gráficas
+        </button>
+        <button
+          type="button"
+          onClick={() => irAInventario(idServidor)}
+          disabled={sinProducto}
+          title={titulo}
+          className="rounded-md border border-[var(--borde)] px-2.5 py-1 text-xs font-medium transition hover:bg-marca-50 hover:text-marca-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Editar
+        </button>
+        <button
+          type="button"
+          onClick={() => irAInventario(idServidor, true)}
+          disabled={sinProducto}
+          title={titulo}
+          className="rounded-md bg-marca-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Oferta
+        </button>
+      </div>
+    )
   }
 
   /**
@@ -179,6 +285,10 @@ export default function AnalisisContenido() {
 
     setFiltros(nuevosFiltros)
     cargarReporte(nuevosFiltros)
+
+    if (idProductoSeleccionado) {
+      cargarProducto(idProductoSeleccionado, nuevosFiltros)
+    }
   }
 
   // Mientras carga se muestra el spinner
@@ -186,6 +296,7 @@ export default function AnalisisContenido() {
 
   const totales = datos?.totales || {}
   const masVendidos = datos?.mas_vendidos || []
+  const productos = datos?.productos || []
   const porDia = datos?.por_dia || []
   const porMes = datos?.por_mes || []
   const porHora = datos?.por_hora || []
@@ -327,19 +438,36 @@ export default function AnalisisContenido() {
                 <tr>
                   <th className="px-5 py-2 font-medium">#</th>
                   <th className="px-5 py-2 font-medium">Producto</th>
+                  <th className="px-5 py-2 font-medium">Fechas</th>
                   <th className="px-5 py-2 text-right font-medium">Unidades</th>
                   <th className="px-5 py-2 text-right font-medium">Ingresos VES</th>
                   <th className="px-5 py-2 text-right font-medium">Ingresos USD</th>
                   <th className="px-5 py-2 text-right font-medium">Ganancia VES</th>
                   <th className="px-5 py-2 text-right font-medium">Ganancia USD</th>
+                  <th className="px-5 py-2 text-right font-medium">Acciones</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-[var(--borde)]">
                 {masVendidos.map((producto, indice) => (
-                  <tr key={indice}>
+                  <tr key={producto.producto_id || `${producto.producto_nombre}-${indice}`}>
                     <td className="px-5 py-2.5 texto-suave">{indice + 1}</td>
-                    <td className="px-5 py-2.5 font-medium">{producto.producto_nombre}</td>
+                    <td className="px-5 py-2.5 font-medium">
+                      <span className="block">{producto.producto_nombre}</span>
+                      {producto.sku && (
+                        <span className="mt-0.5 block font-mono text-xs font-normal texto-suave">
+                          {producto.sku}
+                        </span>
+                      )}
+                      {!producto.producto_id && (
+                        <span className="mt-0.5 block text-xs font-normal text-amber-700">
+                          Producto eliminado
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-2.5">
+                      <FechasProducto producto={producto} />
+                    </td>
                     <td className="px-5 py-2.5 text-right font-semibold">{producto.unidades}</td>
                     <td className="px-5 py-2.5 text-right">
                       Bs. {formatearVes(producto.ingresos_ves)}
@@ -350,6 +478,9 @@ export default function AnalisisContenido() {
                     </td>
                     <td className="px-5 py-2.5 text-right text-exito-600">
                       {formatearUsd(producto.ganancia_usd)}
+                    </td>
+                    <td className="px-5 py-2.5">
+                      {botonesDeAccion(producto.producto_id, () => verGraficas(producto))}
                     </td>
                   </tr>
                 ))}
@@ -387,10 +518,11 @@ export default function AnalisisContenido() {
               <thead className="bg-[var(--fondo)] text-left text-xs texto-suave uppercase">
                 <tr>
                   <th className="px-5 py-2 font-medium">Producto</th>
+                  <th className="px-5 py-2 font-medium">Fechas</th>
                   <th className="px-5 py-2 text-right font-medium">Stock</th>
                   <th className="px-5 py-2 text-right font-medium">Precio VES</th>
                   <th className="px-5 py-2 text-right font-medium">Descuento actual</th>
-                  <th className="px-5 py-2 text-right font-medium">Acción</th>
+                  <th className="px-5 py-2 text-right font-medium">Acciones</th>
                 </tr>
               </thead>
 
@@ -406,6 +538,9 @@ export default function AnalisisContenido() {
                           <span className="ml-2 text-xs texto-suave">{producto.sku}</span>
                         )}
                       </td>
+                      <td className="px-5 py-2.5">
+                        <FechasProducto producto={producto} />
+                      </td>
                       <td className="px-5 py-2.5 text-right">{producto.stock}</td>
                       <td className="px-5 py-2.5 text-right">
                         Bs. {formatearVes(producto.precio_ves)}
@@ -420,13 +555,8 @@ export default function AnalisisContenido() {
                           <span className="text-xs texto-suave">Sin descuento</span>
                         )}
                       </td>
-                      <td className="px-5 py-2.5 text-right">
-                        <button
-                          onClick={() => abrirDescuento(producto)}
-                          className="rounded-lg bg-marca-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-marca-700"
-                        >
-                          {enDescuento ? 'Cambiar descuento' : 'Agregar descuento'}
-                        </button>
+                      <td className="px-5 py-2.5">
+                        {botonesDeAccion(producto.id, () => verGraficas(producto))}
                       </td>
                     </tr>
                   )
@@ -435,6 +565,50 @@ export default function AnalisisContenido() {
             </table>
           </div>
         )}
+      </section>
+
+      {/* --- Análisis de un producto (descuentos y ventas) --- */}
+      <section ref={refAnalisisProducto} className="tarjeta scroll-mt-6 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">Análisis por producto</h2>
+            <p className="mt-0.5 text-xs texto-suave">
+              Selecciona un producto para ver si sus ventas aumentaron después de aplicar
+              una oferta o descuento.
+            </p>
+          </div>
+
+          <select
+            value={idProductoSeleccionado}
+            onChange={seleccionarProducto}
+            className="campo max-w-sm"
+            aria-label="Producto para analizar"
+          >
+            <option value="">Selecciona un producto…</option>
+            {productos.map((producto) => (
+              <option key={producto.id} value={producto.id}>
+                {producto.nombre}
+                {producto.sku ? ` · ${producto.sku}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <Aviso
+          tipo="error"
+          mensaje={errorProducto}
+          alCerrar={() => setErrorProducto('')}
+        />
+
+        {!idProductoSeleccionado ? (
+          <p className="py-8 text-center text-sm texto-suave">
+            Elige un producto en la lista o pulsa «Gráficas» en una de las tablas de arriba.
+          </p>
+        ) : cargandoProducto ? (
+          <p className="py-8 text-center text-sm texto-suave">Cargando las gráficas…</p>
+        ) : analisisProducto ? (
+          <DetalleProducto datos={analisisProducto} />
+        ) : null}
       </section>
 
       {/* --- Gráfica de ventas por día --- */}
@@ -588,15 +762,251 @@ export default function AnalisisContenido() {
           </div>
         </div>
       </Grafica>
+    </div>
+  )
+}
 
-      {/* --- Modal para aplicar descuento --- */}
-      <ModalDescuento
-        abierto={productoDescuento !== null}
-        producto={productoDescuento}
-        guardando={guardandoDescuento}
-        alGuardar={guardarDescuento}
-        alCerrar={() => setProductoDescuento(null)}
-      />
+/**
+ * Muestra las fechas importantes de un producto en las listas.
+ * @param {object} props - { producto }
+ * @returns {JSX.Element}
+ */
+function FechasProducto({ producto }) {
+  const registrado = fechaCorta(producto.creado_en)
+  const editado = fechaCorta(producto.actualizado_en)
+  const ultimaVenta = producto.ultima_venta ? fechaCorta(producto.ultima_venta) : null
+  const nuncaVendido = !producto.ultima_venta
+  const dias = Number(producto.dias_sin_vender)
+  const tieneDias = Number.isFinite(dias)
+
+  return (
+    <div className="space-y-0.5 text-xs texto-suave">
+      <p>
+        <span className="font-medium">Registrado:</span> {registrado}
+      </p>
+      <p>
+        <span className="font-medium">Editado:</span> {editado}
+      </p>
+      <p>
+        <span className="font-medium">Última venta:</span>{' '}
+        {nuncaVendido ? 'Nunca' : ultimaVenta}
+      </p>
+      {tieneDias && (
+        <p
+          className={
+            dias > 30
+              ? 'font-medium text-amber-700'
+              : dias === 0
+                ? 'font-medium text-exito-600'
+                : ''
+          }
+        >
+          {nuncaVendido
+            ? `Sin vender desde el registro (${dias} día${dias === 1 ? '' : 's'})`
+            : dias === 0
+              ? 'Se vendió hoy'
+              : `Hace ${dias} día${dias === 1 ? '' : 's'} sin vender`}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Gráficas y totales de un solo producto.
+ * @param {object} props - { datos: { producto, resumen, comparacion, por_dia } }
+ * @returns {JSX.Element}
+ */
+function DetalleProducto({ datos }) {
+  const { producto, resumen, comparacion } = datos
+  const porDia = datos.por_dia || []
+
+  const totalUnidades = Number(resumen.unidades) || 0
+  const conDescuento = Number(resumen.unidades_con_descuento) || 0
+  const sinDescuento = Number(resumen.unidades_sin_descuento) || 0
+  const porcentajeDescuento =
+    totalUnidades > 0 ? Math.round((conDescuento / totalUnidades) * 100) : 0
+  const diasSinVender = Number(resumen.dias_sin_vender)
+  const tieneDias = Number.isFinite(diasSinVender)
+  const aumento = comparacion.aumento_porcentaje
+
+  const descuentoUnidad = Number(producto.descuento_unidad_porcentaje) || 0
+  const descuentoBulto = Number(producto.descuento_bulto_porcentaje) || 0
+
+  const datosComparacion = comparacion.aplica
+    ? [
+        {
+          etiqueta: 'Antes',
+          promedio: comparacion.promedio_antes,
+          unidades: comparacion.unidades_antes,
+          dias: comparacion.dias_antes,
+        },
+        {
+          etiqueta: 'Después',
+          promedio: comparacion.promedio_despues,
+          unidades: comparacion.unidades_despues,
+          dias: comparacion.dias_despues,
+        },
+      ]
+    : []
+
+  const claseComparacion =
+    aumento === null
+      ? 'border-[var(--borde)] bg-[var(--fondo)]'
+      : aumento >= 0
+        ? 'border-exito-500/30 bg-exito-500/10 text-exito-600'
+        : 'border-red-200 bg-red-50 text-red-700'
+
+  const textoAumento =
+    aumento === null
+      ? 'No hay suficientes ventas antes del descuento para comparar'
+      : aumento > 0
+        ? `Las ventas aumentaron ${aumento}%`
+        : aumento < 0
+          ? `Las ventas bajaron ${Math.abs(aumento)}%`
+          : 'Las ventas se mantuvieron igual (0%)'
+
+  return (
+    <div className="mt-5 space-y-5 border-t border-[var(--borde)] pt-5">
+      {/* --- Datos del producto --- */}
+      <div>
+        <h3 className="text-lg font-semibold">
+          {producto.nombre}
+          {producto.variante ? ` - ${producto.variante}` : ''}
+        </h3>
+
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs texto-suave">
+          {producto.sku && <span className="font-mono">{producto.sku}</span>}
+          <span>Registrado: {fechaCorta(producto.creado_en)}</span>
+          <span>Editado: {fechaCorta(producto.actualizado_en)}</span>
+          <span>Stock: {producto.stock}</span>
+          <span>
+            {descuentoUnidad > 0
+              ? `Oferta por unidad: ${descuentoUnidad}% desde ${producto.descuento_unidad_desde} und.`
+              : 'Sin descuento por unidad'}
+          </span>
+          {descuentoBulto > 0 && <span>Oferta por bulto: {descuentoBulto}%</span>}
+        </div>
+
+        <p className="mt-1 text-xs texto-suave">
+          {resumen.nunca_vendido
+            ? `Nunca se ha vendido. Registrado hace ${diasSinVender} día(s).`
+            : `Última venta: ${fechaCorta(resumen.ultima_venta)}${
+                tieneDias
+                  ? ` · Hace ${diasSinVender} día${diasSinVender === 1 ? '' : 's'} sin vender`
+                  : ''
+              }.`}
+        </p>
+      </div>
+
+      {/* --- Cifras del periodo --- */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Cifra
+          titulo="Unidades en el periodo"
+          valor_texto={String(totalUnidades)}
+          detalle={`${resumen.ventas || 0} venta(s) · ${resumen.dias_con_ventas || 0} día(s) con ventas`}
+        />
+        <Cifra
+          titulo="Con descuento"
+          valor_texto={String(conDescuento)}
+          detalle={`${porcentajeDescuento}% de las unidades`}
+        />
+        <Cifra
+          titulo="Sin descuento"
+          valor_texto={String(sinDescuento)}
+          detalle="Unidades vendidas a precio normal"
+        />
+        <Cifra
+          titulo="Ingresos del periodo"
+          valor_ves={resumen.ingresos_ves}
+          valor_usd={resumen.ingresos_usd}
+          detalle={`Ganancia: Bs. ${formatearVes(resumen.ganancia_ves)}`}
+        />
+      </div>
+
+      {/* --- Resultado de la comparación antes/después --- */}
+      {comparacion.aplica ? (
+        <div className={`rounded-lg border p-4 ${claseComparacion}`}>
+          <p className="font-semibold">{textoAumento}</p>
+          <p className="mt-1 text-xs">
+            Promedio diario antes del primer descuento:{' '}
+            <strong>{comparacion.promedio_antes} und/día</strong> durante{' '}
+            {comparacion.dias_antes} día(s). Después:{' '}
+            <strong>{comparacion.promedio_despues} und/día</strong> durante{' '}
+            {comparacion.dias_despues} día(s). El primer descuento fue el{' '}
+            {fechaCorta(comparacion.primera_con_descuento)}.
+          </p>
+        </div>
+      ) : (
+        <Aviso
+          tipo="info"
+          mensaje="Este producto todavía no tiene ventas con descuento. Cuando apliques una oferta y se venda, aquí verás si las ventas subieron o bajaron."
+        />
+      )}
+
+      {/* --- Gráficas del producto --- */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Grafica
+          titulo="Unidades por día"
+          descripcion="Ventas con descuento y sin descuento en el periodo."
+          hayDatos={totalUnidades > 0}
+        >
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={porDia}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--borde)" vertical={false} />
+              <XAxis
+                dataKey="etiqueta"
+                tick={{ fontSize: 11 }}
+                tickFormatter={(valor) => fechaCorta(valor).slice(0, 5)}
+              />
+              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+              <Tooltip
+                labelFormatter={(valor) => fechaCorta(valor)}
+                contentStyle={{ borderRadius: '0.5rem', fontSize: '0.8rem' }}
+                cursor={{ fill: 'rgba(49,130,246,0.1)' }}
+              />
+              <Legend />
+              <Bar
+                dataKey="unidades_sin_descuento"
+                name="Sin descuento"
+                stackId="unidades"
+                fill="#3182f6"
+              />
+              <Bar
+                dataKey="unidades_con_descuento"
+                name="Con descuento"
+                stackId="unidades"
+                fill="#16a34a"
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </Grafica>
+
+        <Grafica
+          titulo="Antes y después del descuento"
+          descripcion="Promedio diario de unidades antes y después del primer descuento."
+          hayDatos={datosComparacion.length > 0}
+        >
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={datosComparacion}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--borde)" vertical={false} />
+              <XAxis dataKey="etiqueta" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+              <Tooltip
+                formatter={(valor) => [`${valor} und/día`, 'Promedio']}
+                contentStyle={{ borderRadius: '0.5rem', fontSize: '0.8rem' }}
+                cursor={{ fill: 'rgba(49,130,246,0.1)' }}
+              />
+              <Bar dataKey="promedio" name="Unidades por día" radius={[4, 4, 0, 0]}>
+                {datosComparacion.map((fila, indice) => (
+                  <Cell key={fila.etiqueta} fill={indice === 0 ? '#94a3b8' : '#16a34a'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Grafica>
+      </div>
     </div>
   )
 }

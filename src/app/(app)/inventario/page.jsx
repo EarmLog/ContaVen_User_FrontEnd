@@ -49,6 +49,7 @@ export default function Inventario() {
   const [ventanaAbierta, setVentanaAbierta] = useState(false)
   const [productoEditando, setProductoEditando] = useState(null) // null = producto nuevo
   const [modoVentana, setModoVentana] = useState('unidad') // 'unidad' o 'bulto'
+  const [enfocarOferta, setEnfocarOferta] = useState(false)
 
   // La tasa del dólar, con un valor por si aún no ha cargado
   const tasa = dolar?.precio_ves || 0
@@ -61,6 +62,35 @@ export default function Inventario() {
   }, [])
 
   /**
+   * Abre la ventana de edición si la URL trae ?editar=<id_servidor>.
+   * El enlace viene de Análisis, junto con &oferta=1 cuando se pulsó
+   * "Oferta". Después de abrir se limpia la URL para que al recargar no
+   * se vuelva a abrir la ventana.
+   * @param {object[]} lista - Productos ya cargados de la base local
+   */
+  function abrirDesdeUrl(lista) {
+    const parametros = new URLSearchParams(window.location.search)
+    const idServidor = parametros.get('editar')
+
+    if (!idServidor) return
+
+    const producto = lista.find((item) => String(item.id_servidor) === idServidor)
+
+    if (!producto) {
+      setError('No encontramos ese producto en el inventario. Puede que se haya eliminado.')
+      window.history.replaceState({}, '', '/inventario/')
+      return
+    }
+
+    setProductoEditando(producto)
+    setModoVentana(Number(producto.unidades_por_bulto) > 1 ? 'bulto' : 'unidad')
+    setEnfocarOferta(parametros.get('oferta') === '1')
+    setError('')
+    setVentanaAbierta(true)
+    window.history.replaceState({}, '', '/inventario/')
+  }
+
+  /**
    * Carga la lista de productos al entrar en la pantalla.
    */
   useEffect(() => {
@@ -69,7 +99,14 @@ export default function Inventario() {
     async function cargar() {
       try {
         const lista = await cargarProductos()
-        if (montado) setProductos(lista)
+        if (!montado) return
+
+        setProductos(lista)
+
+        // Si se llegó desde Análisis con /inventario/?editar=<id>, se abre
+        // la ventana de ese producto. Se revisa después de cargar la lista
+        // para poder encontrar el id del servidor.
+        abrirDesdeUrl(lista)
       } catch (errorCarga) {
         if (montado) setError(errorCarga.message)
       } finally {
@@ -104,6 +141,7 @@ export default function Inventario() {
   function abrirNuevo(modo = 'unidad') {
     setProductoEditando(null)
     setModoVentana(modo)
+    setEnfocarOferta(false)
     setError('')
     setVentanaAbierta(true)
   }
@@ -112,10 +150,12 @@ export default function Inventario() {
    * Abre la ventana con los datos de un producto para editarlo.
    * Si el producto se vende por bulto, se abre el formulario de bulto.
    * @param {object} producto - El producto a editar
+   * @param {boolean} oferta - Si true, se resalta la parte de descuentos
    */
-  function abrirEditar(producto) {
+  function abrirEditar(producto, oferta = false) {
     setProductoEditando(producto)
     setModoVentana(Number(producto.unidades_por_bulto) > 1 ? 'bulto' : 'unidad')
+    setEnfocarOferta(oferta)
     setError('')
     setVentanaAbierta(true)
   }
@@ -126,6 +166,7 @@ export default function Inventario() {
   function cerrarVentana() {
     setVentanaAbierta(false)
     setProductoEditando(null)
+    setEnfocarOferta(false)
   }
 
   /**
@@ -450,11 +491,12 @@ export default function Inventario() {
       {/* --- Ventana para registrar o editar --- */}
       <ModalProducto
         // La key cambia con cada producto o modo para que el formulario se reinicie
-        key={`${productoEditando?.id || 'nuevo'}-${modoVentana}`}
+        key={`${productoEditando?.id || 'nuevo'}-${modoVentana}-${enfocarOferta ? 'oferta' : 'normal'}`}
         abierto={ventanaAbierta}
         producto={productoEditando}
         tasa={tasa}
         modo={modoVentana}
+        enfocarOferta={enfocarOferta}
         guardando={guardando}
         alGuardar={guardarProducto}
         alCerrar={cerrarVentana}

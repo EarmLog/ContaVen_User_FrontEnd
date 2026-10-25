@@ -144,7 +144,7 @@ function generarSkuPreview({ nombre = '', tipo = '', marca = '', variante = '' }
 
 /**
  * Ventana para registrar o editar un producto.
- * @param {object} props - { abierto, producto, tasa, modo, guardando, alGuardar, alCerrar }
+ * @param {object} props - { abierto, producto, tasa, modo, enfocarOferta, guardando, alGuardar, alCerrar }
  * @returns {JSX.Element}
  */
 export default function ModalProducto({
@@ -152,6 +152,7 @@ export default function ModalProducto({
   producto,
   tasa,
   modo = 'unidad',
+  enfocarOferta = false,
   guardando,
   alGuardar,
   alCerrar,
@@ -160,12 +161,16 @@ export default function ModalProducto({
   const [formulario, setFormulario] = useState(() => datosIniciales(producto))
   const [errores, setErrores] = useState({})
 
-  // Si el producto ya trae descuentos, las casillas arrancan marcadas
+  // Si el producto ya trae descuentos, las casillas arrancan marcadas.
+  // Cuando se llega desde "Oferta" en Análisis, también se marca la casilla
+  // del modo que se está editando para que el usuario solo escriba el %.
   const [descuentoUnidadActivo, setDescuentoUnidadActivo] = useState(
-    Number(producto?.descuento_unidad_porcentaje) > 0,
+    Number(producto?.descuento_unidad_porcentaje) > 0 ||
+      (enfocarOferta && modo !== 'bulto'),
   )
   const [descuentoBultoActivo, setDescuentoBultoActivo] = useState(
-    Number(producto?.descuento_bulto_porcentaje) > 0,
+    Number(producto?.descuento_bulto_porcentaje) > 0 ||
+      (enfocarOferta && modo === 'bulto'),
   )
 
   const esBulto = modo === 'bulto'
@@ -288,7 +293,7 @@ export default function ModalProducto({
       nuevos.precio = 'Debes colocar el precio de venta en VES o en USD.'
     }
 
-    if (descuentoUnidadActivo) {
+    if (!esBulto && descuentoUnidadActivo) {
       const porcentaje = Number(formulario.descuento_unidad_porcentaje)
       if (!(porcentaje > 0) || porcentaje > 100) {
         nuevos.descuento = 'El porcentaje de descuento debe estar entre 1 y 100.'
@@ -298,7 +303,7 @@ export default function ModalProducto({
       }
     }
 
-    if (descuentoBultoActivo) {
+    if (esBulto && descuentoBultoActivo) {
       const porcentaje = Number(formulario.descuento_bulto_porcentaje)
       if (!(porcentaje > 0) || porcentaje > 100) {
         nuevos.descuentoBulto = 'El porcentaje de descuento debe estar entre 1 y 100.'
@@ -388,7 +393,7 @@ export default function ModalProducto({
               value={formulario.nombre}
               onChange={manejarCambio}
               placeholder="Arroz"
-              autoFocus
+              autoFocus={!enfocarOferta}
               className={`campo ${errores.nombre ? 'border-red-400' : ''}`}
             />
             {errores.nombre && <p className="mt-1 text-xs text-red-600">{errores.nombre}</p>}
@@ -701,7 +706,19 @@ export default function ModalProducto({
 
         {/* --- Descuento por cantidad (modo unidad) --- */}
         {!esBulto && (
-          <div className="rounded-lg border border-[var(--borde)] p-4">
+          <div
+            className={`rounded-lg border p-4 ${
+              enfocarOferta
+                ? 'border-marca-400 ring-2 ring-marca-200'
+                : 'border-[var(--borde)]'
+            }`}
+          >
+            {enfocarOferta && (
+              <p className="mb-3 rounded-md bg-marca-50 px-3 py-2 text-xs font-medium text-marca-700">
+                Estás agregando o editando una oferta para este producto.
+              </p>
+            )}
+
             <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
               <input
                 type="checkbox"
@@ -722,6 +739,7 @@ export default function ModalProducto({
                     step="0.01"
                     min="1"
                     max="100"
+                    autoFocus={enfocarOferta}
                     value={formulario.descuento_unidad_porcentaje}
                     onChange={manejarCambio}
                     placeholder="10"
@@ -754,7 +772,19 @@ export default function ModalProducto({
 
         {/* --- Descuento por bulto completo (modo bulto) --- */}
         {esBulto && (
-          <div className="rounded-lg border border-[var(--borde)] p-4">
+          <div
+            className={`rounded-lg border p-4 ${
+              enfocarOferta
+                ? 'border-marca-400 ring-2 ring-marca-200'
+                : 'border-[var(--borde)]'
+            }`}
+          >
+            {enfocarOferta && (
+              <p className="mb-3 rounded-md bg-marca-50 px-3 py-2 text-xs font-medium text-marca-700">
+                Estás agregando o editando una oferta para este producto.
+              </p>
+            )}
+
             <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold">
               <input
                 type="checkbox"
@@ -774,6 +804,7 @@ export default function ModalProducto({
                   step="0.01"
                   min="1"
                   max="100"
+                  autoFocus={enfocarOferta}
                   value={formulario.descuento_bulto_porcentaje}
                   onChange={manejarCambio}
                   placeholder="10"

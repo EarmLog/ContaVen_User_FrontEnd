@@ -255,6 +255,21 @@ export function obtenerProductosSinVender(filtros = {}) {
   return llamarApi(`/analisis/productos-sin-vender${consulta ? `?${consulta}` : ''}`)
 }
 
+/**
+ * Trae las gráficas y los totales de un solo producto.
+ * Se usa en Análisis para ver si sus ventas subieron con los descuentos.
+ */
+export function obtenerAnalisisProducto(id, filtros = {}) {
+  const parametros = new URLSearchParams()
+
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor) parametros.append(clave, valor)
+  }
+
+  const consulta = parametros.toString()
+  return llamarApi(`/analisis/producto/${id}${consulta ? `?${consulta}` : ''}`)
+}
+
 // ============================================================
 // CONFIGURACIÓN
 // ============================================================

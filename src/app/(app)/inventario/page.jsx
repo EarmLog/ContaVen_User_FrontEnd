@@ -288,7 +288,10 @@ export default function Inventario() {
                       <tr key={producto.id}>
                         <td className="px-5 py-2.5 font-medium">
                           <span className="flex items-center gap-2">
-                            {producto.nombre}
+                            <span className="truncate">
+                              {producto.nombre}
+                              {producto.variante ? ` - ${producto.variante}` : ''}
+                            </span>
                             {/* Marca de producto sin subir al servidor */}
                             {producto.sincronizado === false && (
                               <span
@@ -308,9 +311,13 @@ export default function Inventario() {
                               </span>
                             )}
                           </span>
-                          {producto.descripcion && (
-                            <p className="text-xs font-normal texto-suave">{producto.descripcion}</p>
-                          )}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-normal texto-suave">
+                            {producto.sku && <span className="font-mono">{producto.sku}</span>}
+                            {producto.marca && <span>Marca: {producto.marca}</span>}
+                            {producto.descripcion && (
+                              <p className="w-full truncate font-normal texto-suave">{producto.descripcion}</p>
+                            )}
+                          </div>
                         </td>
                         <td className="px-5 py-2.5 texto-suave">{producto.tipo || '—'}</td>
                         <td className="px-5 py-2.5 text-right">
@@ -379,12 +386,16 @@ export default function Inventario() {
                     {/* Nombre, descripción, tipo y stock */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-medium">{producto.nombre}</p>
+                        <p className="truncate font-medium">
+                          {producto.nombre}
+                          {producto.variante ? ` - ${producto.variante}` : ''}
+                        </p>
                         {producto.descripcion && (
                           <p className="truncate text-xs texto-suave">{producto.descripcion}</p>
                         )}
                         <p className="mt-0.5 text-xs texto-suave">
                           {producto.tipo || 'Sin tipo'}
+                          {producto.marca ? ` · Marca: ${producto.marca}` : ''}
                           {producto.sku ? ` · ${producto.sku}` : ''}
                         </p>
                       </div>

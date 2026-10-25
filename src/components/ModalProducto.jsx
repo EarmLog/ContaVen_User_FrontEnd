@@ -378,7 +378,7 @@ export default function ModalProducto({
         {/* --- Datos básicos --- */}
         <div className="grid gap-4 sm:grid-cols-2">
           {/* Nombre (obligatorio) */}
-          <div className="sm:col-span-2">
+          <div>
             <label className="mb-1 block text-sm font-medium">
               Nombre <span className="text-error-500">*</span>
             </label>
@@ -392,6 +392,22 @@ export default function ModalProducto({
               className={`campo ${errores.nombre ? 'border-red-400' : ''}`}
             />
             {errores.nombre && <p className="mt-1 text-xs text-red-600">{errores.nombre}</p>}
+          </div>
+
+          {/* Variante / Presentación */}
+          <div>
+            <label className="mb-1 block text-sm font-medium">Variante / Presentación</label>
+            <input
+              name="variante"
+              type="text"
+              value={formulario.variante}
+              onChange={manejarCambio}
+              placeholder="Grano largo, 5kg, Rojo..."
+              className="campo"
+            />
+            <p className="mt-1 text-xs texto-suave">
+              Se usa junto con nombre/marca para generar el SKU automáticamente.
+            </p>
           </div>
 
           {/* Stock (obligatorio) */}

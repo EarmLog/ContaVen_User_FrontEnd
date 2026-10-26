@@ -34,6 +34,19 @@ export default function Login() {
   const [captchaOk, setCaptchaOk] = useState(false)
   const [reiniciarCaptcha, setReiniciarCaptcha] = useState(0)
 
+  // Correo con el que se resolvió el captcha actual; si el usuario cambia
+  // el correo después de escribir el código, se invalida el captcha.
+  const correoCaptchaRef = useRef(null)
+
+  // Espera a que el usuario deje de escribir para pedir un captcha nuevo,
+  // en lugar de reiniciarlo en cada letra del campo de correo.
+  const timeoutCaptchaRef = useRef(null)
+
+  // Al salir del componente se cancela el timer pendiente del captcha
+  useEffect(() => () => {
+    if (timeoutCaptchaRef.current) clearTimeout(timeoutCaptchaRef.current)
+  }, [])
+
   // Evita que el efecto de "ya hay sesión" navegue antes de que termine
   // de entrar (perfil + primera sincronización del inventario).
   const redirigiendoManual = useRef(false)
@@ -61,10 +74,15 @@ export default function Login() {
     const { name, value } = evento.target
     setDatos((anterior) => ({ ...anterior, [name]: value }))
 
-    // Si cambia el correo, se vuelve a pedir el captcha
+    // Si cambia el correo, se vuelve a pedir el captcha, pero solo
+    // después de que el usuario deje de escribir (con debounce) para no
+    // reiniciarlo en cada letra del campo.
     if (name === 'correo') {
-      setCaptchaOk(false)
-      setReiniciarCaptcha((n) => n + 1)
+      if (timeoutCaptchaRef.current) clearTimeout(timeoutCaptchaRef.current)
+      timeoutCaptchaRef.current = setTimeout(() => {
+        setCaptchaOk(false)
+        setReiniciarCaptcha((n) => n + 1)
+      }, 800)
     }
   }
 
@@ -82,6 +100,14 @@ export default function Login() {
 
     // Si hay algún error de validación se detiene aquí
     if (nuevosErrores.correo || nuevosErrores.contrasena) return
+
+    const correoActual = datos.correo.trim().toLowerCase()
+
+    // Si el correo cambió después de resolver el captcha, se pide uno nuevo
+    if (captchaOk && correoActual !== correoCaptchaRef.current) {
+      setCaptchaOk(false)
+      setReiniciarCaptcha((n) => n + 1)
+    }
 
     // Sin el captcha resuelto no se intenta entrar
     if (!captchaOk) {
@@ -190,7 +216,13 @@ export default function Login() {
           </div>
 
           {/* Reto de seguridad: obligatorio para todas las cuentas */}
-          <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
+          <Captcha
+            alValidar={(ok) => {
+              setCaptchaOk(ok)
+              if (ok) correoCaptchaRef.current = datos.correo.trim().toLowerCase()
+            }}
+            reiniciar={reiniciarCaptcha}
+          />
 
           {/* Botón de entrar */}
           <button

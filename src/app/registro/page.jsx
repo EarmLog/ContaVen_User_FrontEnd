@@ -13,7 +13,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import Aviso from '../../components/ui/Aviso'
 import Captcha from '../../components/Captcha'
@@ -43,6 +43,19 @@ export default function Registro() {
   const [captchaOk, setCaptchaOk] = useState(false)
   const [reiniciarCaptcha, setReiniciarCaptcha] = useState(0)
 
+  // Correo con el que se resolvió el captcha actual; si el usuario cambia
+  // el correo después de escribir el código, se invalida el captcha.
+  const correoCaptchaRef = useRef(null)
+
+  // Espera a que el usuario deje de escribir para pedir un captcha nuevo,
+  // en lugar de reiniciarlo en cada letra del campo de correo.
+  const timeoutCaptchaRef = useRef(null)
+
+  // Al salir del componente se cancela el timer pendiente del captcha
+  useEffect(() => () => {
+    if (timeoutCaptchaRef.current) clearTimeout(timeoutCaptchaRef.current)
+  }, [])
+
   // Para mandar al usuario al login cuando termine el registro
   const navegar = useRouter()
 
@@ -54,10 +67,15 @@ export default function Registro() {
     const { name, value } = evento.target
     setDatos((anterior) => ({ ...anterior, [name]: value }))
 
-    // Si cambia el correo, se vuelve a pedir el captcha
+    // Si cambia el correo, se vuelve a pedir el captcha, pero solo
+    // después de que el usuario deje de escribir (con debounce) para no
+    // reiniciarlo en cada letra del campo.
     if (name === 'correo') {
-      setCaptchaOk(false)
-      setReiniciarCaptcha((n) => n + 1)
+      if (timeoutCaptchaRef.current) clearTimeout(timeoutCaptchaRef.current)
+      timeoutCaptchaRef.current = setTimeout(() => {
+        setCaptchaOk(false)
+        setReiniciarCaptcha((n) => n + 1)
+      }, 800)
     }
   }
 
@@ -82,6 +100,14 @@ export default function Registro() {
 
     // Si hay algún error se detiene aquí
     if (Object.values(nuevosErrores).some(Boolean)) return
+
+    const correoActual = datos.correo.trim().toLowerCase()
+
+    // Si el correo cambió después de resolver el captcha, se pide uno nuevo
+    if (captchaOk && correoActual !== correoCaptchaRef.current) {
+      setCaptchaOk(false)
+      setReiniciarCaptcha((n) => n + 1)
+    }
 
     // Sin el captcha resuelto no se crea la cuenta
     if (!captchaOk) {
@@ -240,7 +266,13 @@ export default function Registro() {
           </div>
 
           {/* Reto de seguridad: obligatorio para todas las cuentas */}
-          <Captcha alValidar={setCaptchaOk} reiniciar={reiniciarCaptcha} />
+          <Captcha
+            alValidar={(ok) => {
+              setCaptchaOk(ok)
+              if (ok) correoCaptchaRef.current = datos.correo.trim().toLowerCase()
+            }}
+            reiniciar={reiniciarCaptcha}
+          />
 
           {/* Botón de registrarse */}
           <button

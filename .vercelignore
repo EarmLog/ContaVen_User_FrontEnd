@@ -1,0 +1,10 @@
+# Carpetas que no forman parte del despliegue web
+.next
+.turbo
+dist
+out
+release-electron
+src-tauri/target
+android/app/build
+android/build
+docker

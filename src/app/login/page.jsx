@@ -5,7 +5,9 @@
  * Pantalla de inicio de sesión de la app de usuarios.
  *
  * Solo tiene dos campos: correo y contraseña.
- * Si todo está bien, entra al Dashboard (Inicio).
+ * Si el usuario intenta entrar sin el captcha resuelto, se abre una
+ * ventana modal con el reto de seguridad. Al aceptarlo, el login verifica
+ * la contraseña y, si todo está bien, entra al Dashboard (Inicio).
  */
 
 import Link from 'next/link'
@@ -14,6 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import Aviso from '../../components/ui/Aviso'
 import Captcha from '../../components/Captcha'
+import ModalContainer from '../../components/ui/ModalContainer'
 import { useSesion } from '../../context/AuthContext'
 import * as api from '../../lib/api'
 import { validarLogin } from '../../lib/validaciones'
@@ -38,14 +41,11 @@ export default function Login() {
   // el correo después de escribir el código, se invalida el captcha.
   const correoCaptchaRef = useRef(null)
 
-  // Espera a que el usuario deje de escribir para pedir un captcha nuevo,
-  // en lugar de reiniciarlo en cada letra del campo de correo.
-  const timeoutCaptchaRef = useRef(null)
+  // Modal con el reto de seguridad: se pide cuando el usuario intenta entrar
+  const [captchaModalAbierto, setCaptchaModalAbierto] = useState(false)
 
-  // Al salir del componente se cancela el timer pendiente del captcha
-  useEffect(() => () => {
-    if (timeoutCaptchaRef.current) clearTimeout(timeoutCaptchaRef.current)
-  }, [])
+  // Referencia al formulario, para enviar el login cuando se acepta el captcha
+  const refFormulario = useRef(null)
 
   // Evita que el efecto de "ya hay sesión" navegue antes de que termine
   // de entrar (perfil + primera sincronización del inventario).
@@ -56,6 +56,21 @@ export default function Login() {
 
   // Se traen la función de entrar y el estado de la sesión
   const { entrar, cargando, estaLogueado } = useSesion()
+
+  // Cierra el modal con el reto de seguridad y pide uno nuevo por seguridad
+  function cerrarModalCaptcha() {
+    setCaptchaModalAbierto(false)
+    setCaptchaOk(false)
+    setReiniciarCaptcha((n) => n + 1)
+  }
+
+  // Al aceptar el reto se cierra el modal y se envía el login. El envío
+  // revisa el captcha y, si sigue válido, verifica la contraseña y entra.
+  function aceptarCaptcha() {
+    if (!captchaOk) return
+    setCaptchaModalAbierto(false)
+    refFormulario.current?.requestSubmit()
+  }
 
   // Si ya hay sesión, no tiene sentido quedarse en el login
   useEffect(() => {
@@ -73,17 +88,6 @@ export default function Login() {
   function manejarCambio(evento) {
     const { name, value } = evento.target
     setDatos((anterior) => ({ ...anterior, [name]: value }))
-
-    // Si cambia el correo, se vuelve a pedir el captcha, pero solo
-    // después de que el usuario deje de escribir (con debounce) para no
-    // reiniciarlo en cada letra del campo.
-    if (name === 'correo') {
-      if (timeoutCaptchaRef.current) clearTimeout(timeoutCaptchaRef.current)
-      timeoutCaptchaRef.current = setTimeout(() => {
-        setCaptchaOk(false)
-        setReiniciarCaptcha((n) => n + 1)
-      }, 800)
-    }
   }
 
   /**
@@ -109,9 +113,9 @@ export default function Login() {
       setReiniciarCaptcha((n) => n + 1)
     }
 
-    // Sin el captcha resuelto no se intenta entrar
+    // Sin el captcha resuelto no se intenta entrar: se abre el modal con el reto
     if (!captchaOk) {
-      setErrorGeneral('Escribe el código de seguridad para continuar.')
+      setCaptchaModalAbierto(true)
       return
     }
 
@@ -155,7 +159,7 @@ export default function Login() {
         </div>
 
         {/* --- Formulario de login --- */}
-        <form onSubmit={manejarEnvio} className="tarjeta space-y-4 p-6">
+        <form ref={refFormulario} onSubmit={manejarEnvio} className="tarjeta space-y-4 p-6">
 
           {/* Mensaje de error si algo salió mal */}
           <Aviso tipo="error" mensaje={errorGeneral} alCerrar={() => setErrorGeneral('')} />
@@ -215,19 +219,10 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Reto de seguridad: obligatorio para todas las cuentas */}
-          <Captcha
-            alValidar={(ok) => {
-              setCaptchaOk(ok)
-              if (ok) correoCaptchaRef.current = datos.correo.trim().toLowerCase()
-            }}
-            reiniciar={reiniciarCaptcha}
-          />
-
-          {/* Botón de entrar */}
+          {/* Botón de entrar: si el captcha no está resuelto se abre el modal */}
           <button
             type="submit"
-            disabled={enviando || !captchaOk}
+            disabled={enviando}
             className="w-full rounded-lg bg-marca-600 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {enviando ? 'Entrando...' : 'Iniciar sesión'}
@@ -241,6 +236,35 @@ export default function Login() {
             </Link>
           </p>
         </form>
+
+        {/* --- Modal con el reto de seguridad (captcha) --- */}
+        <ModalContainer
+          abierto={captchaModalAbierto}
+          titulo="Código de seguridad"
+          alCerrar={cerrarModalCaptcha}
+          ancho="max-w-md"
+        >
+          <div className="space-y-4">
+            {/* Reto de seguridad: obligatorio para todas las cuentas */}
+            <Captcha
+              alValidar={(ok) => {
+                setCaptchaOk(ok)
+                if (ok) correoCaptchaRef.current = datos.correo.trim().toLowerCase()
+              }}
+              reiniciar={reiniciarCaptcha}
+            />
+
+            {/* Botón para aceptar el reto y continuar con el login */}
+            <button
+              type="button"
+              onClick={aceptarCaptcha}
+              disabled={enviando || !captchaOk}
+              className="w-full rounded-lg bg-marca-600 py-2.5 text-sm font-medium text-white transition hover:bg-marca-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Aceptar
+            </button>
+          </div>
+        </ModalContainer>
       </div>
     </div>
   )
